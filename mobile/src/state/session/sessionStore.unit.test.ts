@@ -6,7 +6,7 @@ const defaultSessionState = {
   userId: null,
   clientProfileId: null,
   activeProgramId: null,
-  entryRoute: "OnboardingEntry" as const,
+  entryRoute: "OnboardingEntry" as const, initialTab: "HomeTab" as const,
   subscriptionStatus: null,
   trialExpiresAt: null,
 };
@@ -24,6 +24,7 @@ describe("sessionStore", () => {
     expect(state.clientProfileId).toBeNull();
     expect(state.activeProgramId).toBeNull();
     expect(state.entryRoute).toBe("OnboardingEntry");
+    expect(state.initialTab).toBe("HomeTab");
     expect(state.subscriptionStatus).toBeNull();
     expect(state.trialExpiresAt).toBeNull();
   });
@@ -32,7 +33,7 @@ describe("sessionStore", () => {
     useSessionStore.getState().setSession({
       userId: "u-1",
       clientProfileId: "p-1",
-      entryRoute: "ProgramReview",
+      entryRoute: "ProgramReview", initialTab: "TodayTab",
     });
 
     const state = useSessionStore.getState();
@@ -40,13 +41,14 @@ describe("sessionStore", () => {
     expect(state.userId).toBe("u-1");
     expect(state.clientProfileId).toBe("p-1");
     expect(state.entryRoute).toBe("ProgramReview");
+    expect(state.initialTab).toBe("TodayTab");
   });
 
   it("setSession persists optional subscription fields when provided", () => {
     useSessionStore.getState().setSession({
       userId: "u-1",
       clientProfileId: "p-1",
-      entryRoute: "ProgramReview",
+      entryRoute: "ProgramReview", initialTab: "TodayTab",
       subscriptionStatus: "trialing",
       trialExpiresAt: "2026-12-01",
     });
@@ -60,7 +62,7 @@ describe("sessionStore", () => {
     useSessionStore.getState().setSession({
       userId: "u-1",
       clientProfileId: "p-1",
-      entryRoute: "ProgramReview",
+      entryRoute: "ProgramReview", initialTab: "TodayTab",
     });
 
     const state = useSessionStore.getState();
@@ -72,7 +74,7 @@ describe("sessionStore", () => {
     useSessionStore.getState().setSession({
       userId: "u-1",
       clientProfileId: "p-1",
-      entryRoute: "ProgramReview",
+      entryRoute: "ProgramReview", initialTab: "TodayTab",
     });
 
     useSessionStore.getState().setActiveProgramId("prog-1");
@@ -83,6 +85,7 @@ describe("sessionStore", () => {
     expect(state.clientProfileId).toBe("p-1");
     expect(state.isAuthenticated).toBe(true);
     expect(state.entryRoute).toBe("ProgramReview");
+    expect(state.initialTab).toBe("TodayTab");
   });
 
   it("setEntitlement updates subscriptionStatus and trialExpiresAt", () => {
@@ -97,7 +100,7 @@ describe("sessionStore", () => {
     useSessionStore.getState().setSession({
       userId: "u-1",
       clientProfileId: "p-1",
-      entryRoute: "ProgramReview",
+      entryRoute: "ProgramReview", initialTab: "TodayTab",
       subscriptionStatus: "active",
       trialExpiresAt: "2027-01-01",
     });
@@ -111,6 +114,7 @@ describe("sessionStore", () => {
     expect(state.clientProfileId).toBeNull();
     expect(state.activeProgramId).toBeNull();
     expect(state.entryRoute).toBe("OnboardingEntry");
+    expect(state.initialTab).toBe("HomeTab");
     expect(state.subscriptionStatus).toBeNull();
     expect(state.trialExpiresAt).toBeNull();
   });

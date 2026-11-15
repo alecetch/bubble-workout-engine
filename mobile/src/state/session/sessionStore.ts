@@ -3,18 +3,22 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 
 export type AppEntryRoute = Extract<keyof OnboardingStackParamList, "OnboardingEntry" | "ProgramReview">;
 
+export type AppInitialTab = "HomeTab" | "TodayTab";
+
 type SessionState = {
   isAuthenticated: boolean;
   userId: string | null;
   clientProfileId: string | null;
   activeProgramId: string | null;
   entryRoute: AppEntryRoute;
+  initialTab: AppInitialTab;
   subscriptionStatus: "trialing" | "active" | "expired" | "cancelled" | null;
   trialExpiresAt: string | null;
   setSession: (payload: {
     userId: string;
     clientProfileId: string;
     entryRoute: AppEntryRoute;
+    initialTab: AppInitialTab;
     subscriptionStatus?: string;
     trialExpiresAt?: string | null;
   }) => void;
@@ -29,18 +33,20 @@ const defaultSession = {
   clientProfileId: null,
   activeProgramId: null,
   entryRoute: "OnboardingEntry" as AppEntryRoute,
+  initialTab: "HomeTab" as AppInitialTab,
   subscriptionStatus: null as SessionState["subscriptionStatus"],
   trialExpiresAt: null as string | null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
   ...defaultSession,
-  setSession: ({ userId, clientProfileId, entryRoute, subscriptionStatus, trialExpiresAt }) => {
+  setSession: ({ userId, clientProfileId, entryRoute, initialTab, subscriptionStatus, trialExpiresAt }) => {
     set({
       isAuthenticated: true,
       userId,
       clientProfileId,
       entryRoute,
+      initialTab,
       subscriptionStatus: (subscriptionStatus ?? null) as SessionState["subscriptionStatus"],
       trialExpiresAt: trialExpiresAt ?? null,
     });

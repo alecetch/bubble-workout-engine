@@ -1,3 +1,4 @@
+import { entryFor } from "./onboardingStatus";
 import { isSessionExpiredError } from "../../api/client";
 import { getAccessToken } from "../../api/tokenStorage";
 import { getMe } from "../../api/me";
@@ -28,8 +29,7 @@ export async function restoreSession(isActive: () => boolean = () => true): Prom
     useSessionStore.getState().setSession({
       userId: me.id,
       clientProfileId: profile.id,
-      entryRoute: profile.onboardingCompletedAt || Number(profile.onboardingStepCompleted ?? 0) >= 3
-        ? "ProgramReview" : "OnboardingEntry",
+      ...entryFor(profile),
       subscriptionStatus: entitlement.subscription_status,
       trialExpiresAt: entitlement.trial_expires_at,
     });

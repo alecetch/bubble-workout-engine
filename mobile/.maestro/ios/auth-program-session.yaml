@@ -23,8 +23,9 @@ appId: fit.get200days.app
 - tapOn: ${PERMISSION_BUTTON}
 - assertNotVisible: '.*Would Like to Send You Notifications.*'
 - extendedWaitUntil:
-    visible: "Program Review"
+    visible: "Today"
     timeout: 30000
+- assertNotVisible: "Program Review"
 - tapOn: "Programs"
 - extendedWaitUntil:
     visible: "Active Programs"
@@ -42,8 +43,9 @@ appId: fit.get200days.app
 - stopApp
 - openLink: "forma://"
 - extendedWaitUntil:
-    visible: "Program Review"
+    visible: "Today"
     timeout: 30000
+- assertNotVisible: "Program Review"
 - assertNotVisible: "Sign in"
 - tapOn: "Programs"
 - extendedWaitUntil:

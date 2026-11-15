@@ -30,3 +30,16 @@ export function navigateFromNotificationResponse(
 
   return true;
 }
+
+// Preserve the pending-response behavior used by App's onReady/authentication hooks.
+export function createNotificationResponseQueue() {
+  let pending: Notifications.NotificationResponse | null = null;
+  return {
+    handle(response: Notifications.NotificationResponse | null): void {
+      if (!navigateFromNotificationResponse(response)) pending = response;
+    },
+    flush(): void {
+      if (pending && navigateFromNotificationResponse(pending)) pending = null;
+    },
+  };
+}

@@ -8,7 +8,7 @@ export function buildSessionState(overrides?: Partial<SessionState>): SessionSta
     userId: "user-test-1",
     clientProfileId: "profile-test-1",
     activeProgramId: null,
-    entryRoute: "ProgramReview",
+    entryRoute: "ProgramReview", initialTab: "TodayTab",
     subscriptionStatus: "active",
     trialExpiresAt: null,
     setSession: vi.fn(),

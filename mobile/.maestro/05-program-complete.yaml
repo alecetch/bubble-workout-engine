@@ -59,8 +59,9 @@ appId: fit.get200days.app
 - tapOn:
     id: "login-submit-button"
 - extendedWaitUntil:
-    visible: "Program Review"
+    visible: "Today"
     timeout: 20000
+- assertNotVisible: "Program Review"
 - tapOn: "Today"
 - extendedWaitUntil:
     visible: "Start Workout"

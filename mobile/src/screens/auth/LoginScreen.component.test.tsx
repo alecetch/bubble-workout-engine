@@ -152,7 +152,7 @@ describe("LoginScreen", () => {
     fillCredentials();
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() =>
-      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "ProgramReview" })),
+      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "ProgramReview", initialTab: "TodayTab" })),
     );
     expect(saveTokensMock).toHaveBeenCalledWith("access-token", "refresh-token");
     expect(resetFromProfileMock).toHaveBeenCalledWith(completeProfile);
@@ -167,7 +167,7 @@ describe("LoginScreen", () => {
     fillCredentials();
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() =>
-      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "OnboardingEntry" })),
+      expect(setSessionMock).toHaveBeenCalledWith(expect.objectContaining({ entryRoute: "OnboardingEntry", initialTab: "HomeTab" })),
     );
     expect(createClientProfileMock).toHaveBeenCalledWith({});
   });

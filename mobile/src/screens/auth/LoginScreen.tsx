@@ -1,3 +1,4 @@
+import { entryFor } from "../../state/session/onboardingStatus";
 import React, { useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -19,11 +20,6 @@ import { typography } from "../../theme/typography";
 import { logger } from "../../utils/logger";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
-
-function isOnboardingComplete(profile: { onboardingCompletedAt?: string | null; onboardingStepCompleted?: number }): boolean {
-  if (profile.onboardingCompletedAt) return true;
-  return Number(profile.onboardingStepCompleted ?? 0) >= 3;
-}
 
 export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -67,7 +63,6 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       await saveTokens(result.access_token, result.refresh_token);
       const profile = await resolveClientProfile(result.client_profile_id);
       const resolvedClientProfileId = profile.id;
-      const entryRoute = isOnboardingComplete(profile) ? "ProgramReview" : "OnboardingEntry";
 
       queryClient.setQueryData(["me"], {
         id: result.user_id,
@@ -81,7 +76,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       setSession({
         userId: result.user_id,
         clientProfileId: resolvedClientProfileId,
-        entryRoute,
+        ...entryFor(profile),
         subscriptionStatus: result.subscription_status,
         trialExpiresAt: result.trial_expires_at ?? null,
       });

@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 it("restores server-verified identity, onboarding route and entitlement", async () => {
   await expect(restoreSession()).resolves.toBe("restored");
-  expect(useSessionStore.getState()).toMatchObject({ isAuthenticated: true, userId: "user", clientProfileId: "profile", entryRoute: "ProgramReview", subscriptionStatus: "active" });
+  expect(useSessionStore.getState()).toMatchObject({ isAuthenticated: true, userId: "user", clientProfileId: "profile", entryRoute: "ProgramReview", initialTab: "TodayTab", subscriptionStatus: "active" });
   expect(queryClient.getQueryData(["me"])).toEqual({ id: "user", clientProfileId: "profile" });
 });
 it("does not call the API on a clean install", async () => {
@@ -51,7 +51,7 @@ it("returns signed_out for an explicit session-expired error", async () => {
 it("resumes incomplete onboarding without generating a profile", async () => {
   vi.mocked(getClientProfile).mockResolvedValue({ id: "profile", onboardingStepCompleted: 1 } as any);
   await restoreSession();
-  expect(useSessionStore.getState().entryRoute).toBe("OnboardingEntry");
+  expect(useSessionStore.getState()).toMatchObject({ entryRoute: "OnboardingEntry", initialTab: "HomeTab" });
 });
 it("does not invent a profile when none is linked", async () => {
   vi.mocked(getMe).mockResolvedValue({ id: "user", clientProfileId: null });
@@ -65,7 +65,20 @@ it("does not mutate session after unmount", async () => {
   expect(queryClient.getQueryData(["me"])).toBeUndefined();
 });
 it("does not overwrite an existing sign-in", async () => {
-  useSessionStore.getState().setSession({ userId: "new-user", clientProfileId: "new-profile", entryRoute: "ProgramReview" });
+  useSessionStore.getState().setSession({ userId: "new-user", clientProfileId: "new-profile", entryRoute: "ProgramReview", initialTab: "TodayTab" });
   await restoreSession();
   expect(useSessionStore.getState().userId).toBe("new-user");
+});
+
+it.each([
+  { onboardingCompletedAt: "2026-11-14", onboardingStepCompleted: 0 },
+  { onboardingCompletedAt: null, onboardingStepCompleted: 3 },
+  { onboardingCompletedAt: null, onboardingStepCompleted: 4 },
+])("restores Today from either onboarding completion signal (%j)", async completion => {
+  vi.mocked(getClientProfile).mockResolvedValue({ id: "profile", userId: "user", ...completion } as any);
+  await restoreSession();
+  expect(useSessionStore.getState()).toMatchObject({ entryRoute: "ProgramReview", initialTab: "TodayTab" });
+  expect(getMe).toHaveBeenCalledTimes(1);
+  expect(getClientProfile).toHaveBeenCalledTimes(1);
+  expect(getEntitlement).toHaveBeenCalledTimes(1);
 });
