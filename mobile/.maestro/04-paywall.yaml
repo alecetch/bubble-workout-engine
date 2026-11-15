@@ -71,4 +71,9 @@ appId: fit.get200days.app
     visible: "Your trial has ended"
     timeout: 10000
 - assertVisible: "Subscribe"
-- assertVisible: "Billed monthly - Cancel anytime"
+# CI has no store SDK key or offering; subscription loading must fail gracefully.
+- extendedWaitUntil:
+    visible: "Subscriptions are unavailable right now"
+    timeout: 10000
+- assertVisible: "Try again"
+- assertVisible: "Restore purchase"
