@@ -4,6 +4,8 @@ import {
   Modal,
   Pressable,
   Platform,
+  Linking,
+  TouchableOpacity,
   SafeAreaView,
   ScrollView,
   Share,
@@ -39,7 +41,7 @@ import { getPreferredHeightUnit, getPreferredUnit } from "../../api/profileApi";
 import { clearTokens, getRefreshToken } from "../../api/tokenStorage";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { openLegalUrl } from "../../components/legal/LegalLinksRow";
-import { logOutPurchases } from "../../lib/purchases";
+import { logOutPurchases, subscriptionManagementUrl } from "../../lib/purchases";
 import type { RootTabParamList } from "../../navigation/AppTabs";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -154,6 +156,7 @@ function SettingsRow({
 export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
   const clearSession = useSessionStore((state) => state.clearSession);
+  const subscriptionStatus = useSessionStore((state) => state.subscriptionStatus);
   const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const hydrateSettings = useSettingsStore((state) => state.hydrate);
   const setShowRestTimer = useSettingsStore((state) => state.setShowRestTimer);
@@ -219,6 +222,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     mutationFn: deleteAccount,
     onSuccess: async () => {
       await clearTokens();
+      logOutPurchases();
       clearSession();
       void queryClient.clear();
     },
@@ -578,6 +582,14 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               This will permanently delete your account, all training history, and all program data.
               This cannot be undone.
             </Text>
+            {subscriptionStatus === "active" || subscriptionStatus === "cancelled" ? <>
+              <Text style={styles.modalBody}>
+                {`Deleting your account doesn't cancel your subscription. Cancel it in ${Platform.OS === "android" ? "Google Play" : "App Store"} settings first to stop being charged.`}
+              </Text>
+              <TouchableOpacity accessibilityRole="link" accessibilityLabel="Manage subscription" onPress={() => void Linking.openURL(subscriptionManagementUrl())}>
+                <Text style={styles.modalSecondaryLabel}>Manage subscription</Text>
+              </TouchableOpacity>
+            </> : null}
             <PressableScale
               style={styles.modalSecondaryButton}
               disabled={deleteAccountMutation.isPending}

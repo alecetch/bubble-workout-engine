@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PurchasesPackage } from "react-native-purchases";
+import type { PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
 
 const sdk = vi.hoisted(() => ({
   configure: vi.fn(), setLogLevel: vi.fn(), logIn: vi.fn(), logOut: vi.fn(),
@@ -24,6 +24,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("RevenueCat SDK boundary", () => {
+  it("prefers monthly and handles absent offerings or packages", async () => {
+    const { selectMonthlyPackage } = await import("./purchases");
+    const monthly = { identifier: "$rc_monthly" } as PurchasesPackage;
+    const other = { identifier: "other" } as PurchasesPackage;
+    const offering = (pkg: PurchasesPackage | null, packages: PurchasesPackage[]) =>
+      ({ current: { monthly: pkg, availablePackages: packages } }) as PurchasesOfferings;
+    expect(selectMonthlyPackage(offering(monthly, [other, monthly]))).toBe(monthly);
+    expect(selectMonthlyPackage(offering(null, [other]))).toBe(other);
+    expect(selectMonthlyPackage(offering(null, []))).toBeNull();
+    expect(selectMonthlyPackage(null)).toBeNull();
+    expect(selectMonthlyPackage({ current: null } as PurchasesOfferings)).toBeNull();
+  });
+
+  it("uses platform subscription management URLs", async () => {
+    const { subscriptionManagementUrl } = await import("./purchases");
+    expect(subscriptionManagementUrl()).toBe("https://apps.apple.com/account/subscriptions");
+    expect(subscriptionManagementUrl("ios")).toBe("https://apps.apple.com/account/subscriptions");
+    expect(subscriptionManagementUrl("android")).toBe("https://play.google.com/store/account/subscriptions");
+    expect(subscriptionManagementUrl("web")).toBe("https://apps.apple.com/account/subscriptions");
+  });
   it("selects direct per-platform public keys and defaults to the current platform", async () => {
     vi.stubEnv("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY", "appl_test");
     vi.stubEnv("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY", "goog_test");
@@ -117,9 +137,10 @@ describe("RevenueCat SDK boundary", () => {
     const offerings = { current: null };
     sdk.getOfferings.mockResolvedValue(offerings);
     sdk.restorePurchases.mockResolvedValue(info);
+    sdk.purchasePackage.mockResolvedValue({ customerInfo: info });
     expect(await p.getPurchaseOfferings()).toBe(offerings);
     expect(await p.restorePurchases()).toBe(info);
-    await p.purchasePackage(pkg);
+    expect(await p.purchasePackage(pkg)).toBe(info);
     expect(sdk.purchasePackage).toHaveBeenCalledWith(pkg);
     p.logOutPurchases();
     expect(sdk.logOut).toHaveBeenCalledOnce();

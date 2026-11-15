@@ -26,7 +26,7 @@ vi.mock("../../state/session/sessionStore", () => ({
   useSessionStore: vi.fn((selector: any) => selector({ clearSession: vi.fn() })),
 }));
 
-vi.mock("../../lib/purchases", () => ({ logOutPurchases: vi.fn() }));
+vi.mock("../../lib/purchases", () => ({ logOutPurchases: vi.fn(), subscriptionManagementUrl: () => Platform.OS === "android" ? "https://play.google.com/store/account/subscriptions" : "https://apps.apple.com/account/subscriptions" }));
 
 vi.mock("../../api/tokenStorage", () => ({
   clearTokens: vi.fn().mockResolvedValue(undefined),
@@ -493,6 +493,50 @@ describe("log out", () => {
 describe("delete account modal", () => {
   beforeEach(() => {
     resetSettingsMocks();
+  });
+
+  it.each(["ios", "android"])("warns paid users and opens %s subscription management", async platform => {
+    const original = Platform.OS;
+    Platform.OS = platform as typeof Platform.OS;
+    try {
+      vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession: vi.fn(), subscriptionStatus: "active" }));
+      render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+      fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+      expect(screen.getByText(/Deleting your account doesn't cancel your subscription/)).toHaveTextContent(platform === "android" ? "Google Play settings" : "App Store settings");
+      fireEvent.click(screen.getByRole("link", { name: "Manage subscription" }));
+      expect(openURLSpy).toHaveBeenCalledWith(platform === "android" ? "https://play.google.com/store/account/subscriptions" : "https://apps.apple.com/account/subscriptions");
+    } finally { Platform.OS = original; }
+  });
+
+  it.each(["trialing", "expired", null])("hides billing warning for %s accounts", status => {
+    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession: vi.fn(), subscriptionStatus: status }));
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    expect(screen.queryByText(/Deleting your account doesn't cancel/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Manage subscription" })).not.toBeInTheDocument();
+  });
+
+  it("warns cancelled subscribers too", () => {
+    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession: vi.fn(), subscriptionStatus: "cancelled" }));
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    expect(screen.getByRole("link", { name: "Manage subscription" })).toBeInTheDocument();
+  });
+
+  it("logs RevenueCat out between clearing tokens and session after deletion", async () => {
+    const { logOutPurchases } = await import("../../lib/purchases");
+    const { clearTokens } = await import("../../api/tokenStorage");
+    vi.mocked(logOutPurchases).mockClear();
+    vi.mocked(clearTokens).mockClear();
+    const clearSession = vi.fn();
+    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession }));
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
+    await waitFor(() => expect(clearSession).toHaveBeenCalled());
+    expect(logOutPurchases).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(clearTokens).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(logOutPurchases).mock.invocationCallOrder[0]);
+    expect(vi.mocked(logOutPurchases).mock.invocationCallOrder[0]).toBeLessThan(clearSession.mock.invocationCallOrder[0]);
   });
 
   it("tapping Delete Account opens the confirmation modal", () => {

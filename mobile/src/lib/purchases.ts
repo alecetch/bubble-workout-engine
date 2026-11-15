@@ -83,9 +83,20 @@ export async function getPurchaseOfferings(): Promise<PurchasesOfferings | null>
   return Purchases.getOfferings();
 }
 
-export async function purchasePackage(pkg: PurchasesPackage): Promise<void> {
+export function selectMonthlyPackage(offerings: PurchasesOfferings | null): PurchasesPackage | null {
+  return offerings?.current?.monthly ?? offerings?.current?.availablePackages[0] ?? null;
+}
+
+export function subscriptionManagementUrl(platform: string = Platform.OS): string {
+  return platform === "android"
+    ? "https://play.google.com/store/account/subscriptions"
+    : "https://apps.apple.com/account/subscriptions";
+}
+
+export async function purchasePackage(pkg: PurchasesPackage): Promise<CustomerInfo> {
   if (!isPurchasesAvailable()) throw new Error("Purchases unavailable");
-  await Purchases.purchasePackage(pkg);
+  const { customerInfo } = await Purchases.purchasePackage(pkg);
+  return customerInfo;
 }
 
 export async function restorePurchases(): Promise<CustomerInfo> {
