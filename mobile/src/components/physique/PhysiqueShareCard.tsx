@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import type { ScanResult } from "../../api/physiqueScan";
+import { BRAND_DOMAIN } from "../../config/brand";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -62,7 +63,7 @@ export function PhysiqueShareCard({ scanResult }: { scanResult: ScanResult }): R
               </Text>
             ))}
           </View>
-          <Text style={styles.tagline}>Track your physique at getforma.fit</Text>
+          <Text style={styles.tagline}>{`Track your physique at ${BRAND_DOMAIN}`}</Text>
         </View>
       </ViewShot>
     </View>

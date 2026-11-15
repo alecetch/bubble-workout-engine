@@ -1,4 +1,4 @@
 import appConfig from "../../app.json";
 
 export const BRAND_WORDMARK = appConfig.expo.name;
-export const BRAND_DOMAIN = "getforma.fit";
+export const BRAND_DOMAIN = "200days.app";
