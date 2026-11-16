@@ -135,6 +135,18 @@ describe("SettingsScreen", () => {
   beforeEach(() => {
     resetSettingsMocks();
   });
+  it.each([
+    [{ conversions: 0, rewardsGranted: 0, rewardsPending: 0, rewardsRemainingThisYear: 2 }, 'Send your personal invite link.'],
+    [{ conversions: 1, rewardsGranted: 1, rewardsRemainingThisYear: 1 }, '1 friend subscribed · 1 free month earned'],
+    [{ conversions: 1, rewardsPending: 1, rewardsRemainingThisYear: 2 }, '1 friend subscribed · 1 on its way'],
+    [{ conversions: 3, rewardsGranted: 2, rewardsCapped: 1, rewardsRemainingThisYear: 0 }, '3 friends subscribed · 2 free months earned · Yearly limit reached'],
+  ])('shows approved referral copy and stats %j', (stats, label) => {
+    referralMocks.info.mockReturnValue(makeQuery({ data: { code: 'CODE', shareUrl: 'https://200days.app/ref/CODE' } }));
+    referralMocks.stats.mockReturnValue(makeQuery({ data: { totalReferrals: 3, ...stats } }));
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    expect(screen.getByText(`Share ${BRAND_WORDMARK} with a friend. When they become a paying subscriber, you get a free month (up to 2 a year).`)).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
   it("shows the general health notice in Legal without injury-specific copy", () => {
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
     const notice = screen.getByTestId("settings-health-notice");

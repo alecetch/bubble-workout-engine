@@ -46,6 +46,12 @@ export function validateProductionEnv(env = process.env) {
   if (isPhysiqueEnabled(env) && !env.OPENAI_API_KEY?.trim()) {
     logger.warn("PHYSIQUE_ENABLED=true without OPENAI_API_KEY; physique analysis is unavailable.");
   }
+  if (env.REFERRAL_REWARDS_ENABLED === "true" && !env.REVENUECAT_SECRET_API_KEY?.trim()) {
+    logger.warn({ event: "referral.config.missing_key" }, "Referral rewards enabled without REVENUECAT_SECRET_API_KEY.");
+  }
+  if (env.NODE_ENV === "production" && env.REFERRAL_REWARDS_ALLOW_SANDBOX === "true") {
+    logger.warn({ event: "referral.config.sandbox_enabled" }, "Sandbox referral rewards are enabled in production.");
+  }
   const errors = findLocalhostProductionEnvErrors(env);
   if (errors.length > 0) {
     throw new Error(

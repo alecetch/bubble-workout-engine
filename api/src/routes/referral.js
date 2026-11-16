@@ -5,6 +5,9 @@ import { safeString } from "../utils/validate.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { generateReferralCode } from "../utils/referralCode.js";
 
+import { getBrand } from "../config/brand.js";
+import { makeReferralRewardService } from "../services/referralRewardService.js";
+
 export const referralRouter = express.Router();
 referralRouter.use(requireAuth);
 
@@ -15,7 +18,7 @@ function resolveUserId(req) {
 }
 
 function buildShareUrl(code) {
-  const base = process.env.APP_BASE_URL ?? "https://getforma.fit";
+  const base = process.env.APP_BASE_URL ?? getBrand().siteUrl;
   return `${base.replace(/\/$/, "")}/ref/${code}`;
 }
 
@@ -40,7 +43,7 @@ export function createReferralCodeHandler(db = pool) {
 
       return res.json({ ok: true, code, shareUrl: buildShareUrl(code) });
     } catch (err) {
-      return res.status(500).json({ ok: false, request_id, error: publicInternalError(err) });
+      return res.status(err.code === "unauthorized" ? 401 : 500).json({ ok: false, request_id, error: publicInternalError(err) });
     }
   };
 }
@@ -50,24 +53,9 @@ export function createReferralStatsHandler(db = pool) {
     const { request_id } = req;
     try {
       const userId = resolveUserId(req);
-      const result = await db.query(
-        `SELECT
-           COUNT(*) FILTER (WHERE converted_at IS NOT NULL) AS conversions,
-           COUNT(*) FILTER (WHERE reward_granted_at IS NOT NULL) AS rewards_granted,
-           COUNT(*) AS total_referrals
-         FROM referral_conversion
-         WHERE referrer_user_id = $1`,
-        [userId],
-      );
-      const row = result.rows[0] ?? {};
-      return res.json({
-        ok: true,
-        totalReferrals: Number(row.total_referrals ?? 0),
-        conversions: Number(row.conversions ?? 0),
-        rewardsGranted: Number(row.rewards_granted ?? 0),
-      });
+      return res.json({ ok: true, ...await makeReferralRewardService({ db }).getStats(userId) });
     } catch (err) {
-      return res.status(500).json({ ok: false, request_id, error: publicInternalError(err) });
+      return res.status(err.code === "unauthorized" ? 401 : 500).json({ ok: false, request_id, error: publicInternalError(err) });
     }
   };
 }

@@ -1,11 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchSubscriber, deriveStatusFromSubscriber, syncUserEntitlement } from "../revenuecatSync.js";
+import { fetchSubscriber, deriveStatusFromSubscriber, syncUserEntitlement, grantPromotionalEntitlement, extendAppleSubscription, deferGoogleSubscription } from "../revenuecatSync.js";
 
 const now = new Date("2026-10-27T12:00:00Z");
 const future = "2026-11-27T12:00:00Z";
 const past = "2026-09-27T12:00:00Z";
 const subscriber = (subscription = {}, expires = future) => ({ entitlements: { pro: { product_identifier: "monthly", expires_date: expires } }, subscriptions: { monthly: subscription } });
+
+for (const [name, helper, path, options, body] of [
+  ['promotional', grantPromotionalEntitlement, 'entitlements/pro%2Fid/promotional', { endTimeMs: 1234 }, { end_time_ms: 1234 }],
+  ['apple', extendAppleSubscription, 'subscriptions/pro%2Fid/extend', {}, { extend_by_days: 30, extend_reason_code: 1 }],
+  ['google', deferGoogleSubscription, 'subscriptions/pro%2Fid/defer', {}, { extend_by_days: 30 }],
+]) {
+  for (const status of [200, 201]) test(`${name} reward POST and success ${status}`, async () => {
+    assert.deepEqual(await helper('user/id', 'pro/id', { ...options, apiKey: 'secret-key', fetchImpl: async (url, opts) => {
+      assert.equal(url, `https://api.revenuecat.com/v1/subscribers/user%2Fid/${path}`);
+      assert.equal(opts.method, 'POST'); assert.equal(opts.headers.Authorization, 'Bearer secret-key');
+      assert.deepEqual(JSON.parse(opts.body), body); assert.ok(opts.signal instanceof AbortSignal);
+      return { status };
+    } }), { skipped: false });
+  });
+  for (const status of [429, 503, 400, 404]) test(`${name} reward error ${status}`, async () => {
+    await assert.rejects(helper('u', 'e', { ...options, apiKey: 'key', fetchImpl: async () => ({ status, json: async () => ({ code: '4030004', message: 'x'.repeat(300) }) }) }), err => {
+      assert.equal(err.code, status >= 500 || status === 429 ? 'revenuecat_temporary' : 'revenuecat_permanent');
+      assert.equal(err.detail.status, status); assert.equal(err.detail.code, '4030004'); assert.equal(err.detail.message.length, 200);
+      return true;
+    });
+  });
+  test(`${name} reward timeout, network failure and missing key`, async () => {
+    let signal;
+    await assert.rejects(helper('u', 'e', { ...options, apiKey: 'key', timeoutMs: 5, fetchImpl: async (_url, opts) => { signal = opts.signal; return new Promise(() => {}); } }), { code: 'revenuecat_temporary' });
+    assert.equal(signal.aborted, true);
+    await assert.rejects(helper('u', 'e', { ...options, apiKey: 'key', fetchImpl: async () => { throw Error('network'); } }), { code: 'revenuecat_temporary' });
+    assert.deepEqual(await helper('u', 'e', { ...options, apiKey: '', fetchImpl() { assert.fail('no fetch without a key'); } }), { skipped: true });
+  });
+}
 
 for (const [details, status] of [[{}, "active"], [{ unsubscribe_detected_at: past }, "cancelled"], [{ billing_issues_detected_at: past }, "billing_issue"]]) {
   test(`derives ${status} from pro and the matching product`, () => {

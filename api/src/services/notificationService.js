@@ -8,7 +8,7 @@ const NON_RETRIABLE_EXPO_ERRORS = new Set([
 ]);
 
 export function makeNotificationService(db, { now = () => new Date() } = {}) {
-  async function send({ userId, title, body, data, isReminder = false, isPaceMessage = false }) {
+  async function send({ userId, title, body, data, isReminder = false, isPaceMessage = false, transactional = false }) {
     try {
       const userR = await db.query(
         `SELECT au.device_push_token, au.email, au.timezone, np.reminder_timezone
@@ -17,21 +17,24 @@ export function makeNotificationService(db, { now = () => new Date() } = {}) {
       );
       const user = userR.rows[0];
       if (!user?.device_push_token) return { sent: false, reason: "no_channel" };
-      const today = localDateInZone(now(), firstValidTimezone(user.timezone, user.reminder_timezone));
-      // Reserve before delivery: concurrent jobs and PR/deload/physique alerts share one daily slot.
-      // Keep the reservation after failure; retrying an ambiguous push could send twice.
-      const claimed = await db.query(`INSERT INTO notification_preference
-          (user_id, last_reminder_sent_date, last_pace_message_sent_on)
-        VALUES ($1, $2::date, CASE WHEN $3 THEN $2::date ELSE NULL END)
-        ON CONFLICT (user_id) DO UPDATE SET last_reminder_sent_date = $2::date,
-          last_pace_message_sent_on = CASE WHEN $3 THEN $2::date ELSE notification_preference.last_pace_message_sent_on END,
-          updated_at = now()
-        WHERE (notification_preference.last_reminder_sent_date IS NULL OR notification_preference.last_reminder_sent_date < $2::date)
-          AND (NOT $4 OR notification_preference.reminder_enabled)
-          AND (NOT $3 OR notification_preference.last_pace_message_sent_on IS NULL
-            OR notification_preference.last_pace_message_sent_on <= $2::date - 7)
-        RETURNING user_id`, [userId, today, isPaceMessage, isReminder]);
-      if (!claimed.rows.length) return { sent: false, reason: "capped_or_disabled" };
+      if (!transactional) {
+        const today = localDateInZone(now(), firstValidTimezone(user.timezone, user.reminder_timezone));
+        // Reserve before delivery: concurrent jobs and PR/deload/physique alerts share one daily slot.
+        // Keep the reservation after failure; retrying an ambiguous push could send twice.
+        const claimed = await db.query(`INSERT INTO notification_preference
+            (user_id, last_reminder_sent_date, last_pace_message_sent_on)
+          VALUES ($1, $2::date, CASE WHEN $3 THEN $2::date ELSE NULL END)
+          ON CONFLICT (user_id) DO UPDATE SET last_reminder_sent_date = $2::date,
+            last_pace_message_sent_on = CASE WHEN $3 THEN $2::date ELSE notification_preference.last_pace_message_sent_on END,
+            updated_at = now()
+          WHERE (notification_preference.last_reminder_sent_date IS NULL OR notification_preference.last_reminder_sent_date < $2::date)
+            AND (NOT $4 OR notification_preference.reminder_enabled)
+            AND (NOT $3 OR notification_preference.last_pace_message_sent_on IS NULL
+              OR notification_preference.last_pace_message_sent_on <= $2::date - 7)
+          RETURNING user_id`, [userId, today, isPaceMessage, isReminder]);
+        if (!claimed.rows.length) return { sent: false, reason: "capped_or_disabled" };
+
+      }
 
       let pushSucceeded = false;
 

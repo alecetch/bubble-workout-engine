@@ -2,6 +2,17 @@ import logger from "../../utils/logger.js";
 import { getBrand } from "../brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+test('referral rewards warn for missing key and production sandbox', t => {
+  const warnings = [];
+  t.mock.method(logger, 'warn', (...args) => warnings.push(args));
+  validateProductionEnv({ NODE_ENV: 'production', APP_DOMAIN: 'https://200days.app', REMINDER_SCHEDULER_ENABLED: 'true',
+    REFERRAL_REWARDS_ENABLED: 'true', REFERRAL_REWARDS_ALLOW_SANDBOX: 'true' });
+  assert.ok(warnings.some(([entry]) => entry?.event === 'referral.config.missing_key'));
+  assert.ok(warnings.some(([entry]) => entry?.event === 'referral.config.sandbox_enabled'));
+  warnings.length = 0;
+  validateProductionEnv({ NODE_ENV: 'test', REFERRAL_REWARDS_ENABLED: 'true', REVENUECAT_SECRET_API_KEY: 'key' });
+  assert.equal(warnings.length, 0);
+});
 import {
   findLocalhostProductionEnvErrors,
   validateProductionEnv,
