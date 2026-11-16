@@ -32,6 +32,11 @@ configure({ asyncUtilTimeout: 5000 });
 // Keep the per-test limit well above one wait's budget, so a slow step reports
 // which element it was waiting for instead of a bare test timeout.
 vi.setConfig({ testTimeout: 15000 });
+// vi.waitFor ignores asyncUtilTimeout and defaults to 1s, which also timed out
+// on loaded CI runners (e.g. the retry/count test on main after #527). Give it
+// the same 5s budget as findBy/waitFor.
+const waitForSlow = <T,>(callback: () => T | Promise<T>, options: { timeout?: number; interval?: number } = {}) =>
+  vi.waitFor(callback, { timeout: 5000, ...options });
 const initEntryMock = vi.fn();
 const startRestMock = vi.fn();
 const stopRestMock = vi.fn();
@@ -181,9 +186,9 @@ describe("SegmentCard", () => {
     const retry = await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
     const original = mutateAsyncMock.mock.calls[0][0];
     fireEvent.click(retry);
-    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    await waitForSlow(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
     expect(mutateAsyncMock).toHaveBeenLastCalledWith(original);
-    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
   });
   it("shows saving and prevents a second send while the request is pending", async () => {
     let resolve!: (value: any) => void;
@@ -232,7 +237,7 @@ describe("SegmentCard", () => {
     const inputs = screen.getAllByPlaceholderText("0");
     fireEvent.change(inputs[2], { target: { value: "75" } });
     fireEvent.click(screen.getByText("Log all sets as complete"));
-    await vi.waitFor(() => expect(complete).toHaveBeenCalledWith("seg-1"));
+    await waitForSlow(() => expect(complete).toHaveBeenCalledWith("seg-1"));
     expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([
       expect.objectContaining({ orderIndex: 2, weightKg: 75 }),
       expect.objectContaining({ orderIndex: 3, weightKg: 75 }),
@@ -245,8 +250,8 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     if (batch) fireEvent.click(await screen.findByText("Log all sets as complete"));
     else fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
-    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await waitForSlow(() => expect(subscription).toHaveBeenCalledTimes(1));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
     expect(screen.queryByRole("button", { name: /set \d+ saving/ })).not.toBeInTheDocument();
   });
   it("a screen retry request retries failed rows with current inputs", async () => {
@@ -259,7 +264,7 @@ describe("SegmentCard", () => {
     await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
     fireEvent.change(screen.getAllByPlaceholderText("0")[0], { target: { value: "70" } });
     rerender(segmentCardElement({ ...props, retryRequest: 1 }));
-    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    await waitForSlow(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
     expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([expect.objectContaining({ weightKg: 70 })]);
   });
   it("keeps failed input and a retry available after closing the panel", async () => {
@@ -274,7 +279,7 @@ describe("SegmentCard", () => {
     await screen.findByRole("button", { name: /Barbell Squat set 1 not saved/ });
     fireEvent.click(screen.getByText("Close"));
     fireEvent.click(await screen.findByRole("button", { name: "Retry unsaved sets" }));
-    await vi.waitFor(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
+    await waitForSlow(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
     expect(mutateAsyncMock.mock.lastCall?.[0].rows).toEqual([expect.objectContaining({ weightKg: 65, repsCompleted: 9 })]);
   });
   it("renders Start Exercise for loadable segments", () => {
@@ -439,7 +444,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     expect(await screen.findByText("Set 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     const inputs = screen.getAllByPlaceholderText("0");
 
     fireEvent.change(inputs[2], { target: { value: "80" } });
@@ -456,7 +461,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getAllByText("Start Exercise")[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
 
-    await vi.waitFor(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 1));
+    await waitForSlow(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 1));
   });
 
   it("calls onInlinePanelClose when Close Log is pressed", async () => {
@@ -466,7 +471,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     fireEvent.click(await screen.findByText("Close Log"));
 
-    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitForSlow(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("treats an omitted loadability flag as loggable", async () => {
@@ -493,7 +498,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(initEntryMock).toHaveBeenCalledWith(expect.objectContaining({ segmentId: segment.id, restTotal: 90 }));
       expect(startRestMock).toHaveBeenCalledWith(segment.id);
     });
@@ -527,7 +532,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
     });
     expect(startRestMock).not.toHaveBeenCalled();
@@ -578,7 +583,7 @@ describe("SegmentCard", () => {
     fireEvent.click(screen.getByText("Start Exercise"));
     fireEvent.click(await screen.findByText("Log all sets as complete"));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(onSubscriptionRequired).toHaveBeenCalledTimes(1);
     });
   });
@@ -688,7 +693,7 @@ describe("SegmentCard — sequential standard-segment logging", () => {
     fireEvent.click(screen.getAllByText("Start Exercise")[0]);
     fireEvent.click(await screen.findByText("Log all sets as complete"));
 
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Barbell Squat ✓.*3 x 7 @ 0 kg/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument();
     expect(screen.queryByText(/Leg Press.*complete Barbell Squat to unlock/)).not.toBeInTheDocument();
@@ -714,9 +719,9 @@ describe("SegmentCard — sequential standard-segment logging", () => {
 
     fireEvent.click(screen.getAllByText("Start Exercise")[0]);
     fireEvent.click(await screen.findByText("Log all sets as complete"));
-    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument());
+    await waitForSlow(() => expect(screen.getByRole("button", { name: "Leg Press set 1 complete" })).toBeInTheDocument());
     fireEvent.click(screen.getByText("Log all sets as complete"));
-    await vi.waitFor(() => expect(saved).toHaveBeenCalledWith("seg-1"));
+    await waitForSlow(() => expect(saved).toHaveBeenCalledWith("seg-1"));
     fireEvent.click(screen.getByText("Close Log"));
     fireEvent.click(await screen.findByText("Resume"));
 
@@ -964,7 +969,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
       expect(screen.getByText("Round 2")).toBeInTheDocument();
       const inputs = screen.getAllByPlaceholderText("0");
@@ -989,7 +994,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
       expect(screen.getByText(/Round 1 ✓/)).toBeInTheDocument();
     });
@@ -1006,7 +1011,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 2));
+    await waitForSlow(() => expect(onSetsLoggedChange).toHaveBeenCalledWith("seg-1", 2));
   });
 
   it("completed round collapses to summary line", async () => {
@@ -1025,7 +1030,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(initEntryMock).toHaveBeenCalledWith(expect.objectContaining({ segmentId: "seg-1", restTotal: 90 }));
       expect(startRestMock).toHaveBeenCalledWith("seg-1");
     });
@@ -1055,7 +1060,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     for (let i = 0; i < 3; i += 1) {
       fillActiveRound();
       fireEvent.click(screen.getByText("Mark round complete"));
-      await vi.waitFor(() => {
+      await waitForSlow(() => {
         expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
         expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
       });
@@ -1073,7 +1078,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     for (let i = 0; i < 3; i += 1) {
       fillActiveRound();
       fireEvent.click(screen.getByText("Mark round complete"));
-      await vi.waitFor(() => {
+      await waitForSlow(() => {
         expect(mutateAsyncMock).toHaveBeenCalledTimes(i + 1);
         expect(screen.getByText(new RegExp(`Round ${i + 1} .*`))).toBeInTheDocument();
       });
@@ -1084,7 +1089,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Superset effort 2" }));
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(4));
+    await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(4));
     expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
       rows: expect.arrayContaining([
         expect.objectContaining({
@@ -1114,7 +1119,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
   });
 
   it("fires haptic on successful round completion", async () => {
@@ -1123,7 +1128,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
 
     fireEvent.click(screen.getByText("Mark round complete"));
 
-    await vi.waitFor(() => {
+    await waitForSlow(() => {
       expect(impactAsyncMock).toHaveBeenCalledWith("light");
     });
   });
@@ -1170,8 +1175,8 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(screen.getByText("Close Log"));
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
     fireEvent.click(await screen.findByText("Done"));
-    await vi.waitFor(() => expect(subscription).toHaveBeenCalledTimes(1), { timeout: 5000 });
-    await vi.waitFor(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0), { timeout: 5000 });
+    await waitForSlow(() => expect(subscription).toHaveBeenCalledTimes(1));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
     expect(complete).not.toHaveBeenCalled();
     expect(screen.getByText("Done")).toBeInTheDocument();
   });
@@ -1189,7 +1194,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Superset effort 1" }));
     fireEvent.click(screen.getByText("Done"));
 
-    await vi.waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(3));
+    await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(3));
     expect(mutateAsyncMock).toHaveBeenLastCalledWith(expect.objectContaining({
       rows: expect.arrayContaining([
         expect.objectContaining({
