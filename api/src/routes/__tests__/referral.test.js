@@ -86,6 +86,8 @@ test("referral stats handler returns zeros when user has no referrals", async ()
 
 test('share URL defaults to brand and honors override', async () => {
   const previous = process.env.APP_BASE_URL;
+  const previousBrand = process.env.BRAND_VARIANT;
+  process.env.BRAND_VARIANT = '200days';
   try {
     for (const base of [undefined, 'https://custom.example/']) {
       if (base) process.env.APP_BASE_URL = base; else delete process.env.APP_BASE_URL;
@@ -93,7 +95,10 @@ test('share URL defaults to brand and honors override', async () => {
       await createReferralCodeHandler({ query: async () => ({ rows: [{ referral_code: 'CODE' }] }) })({ auth: { user_id: 'u' } }, res);
       assert.equal(res.body.shareUrl, `${(base ?? getBrand().siteUrl).replace(/\/$/, '')}/ref/CODE`);
     }
-  } finally { if (previous === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = previous; }
+  } finally {
+    if (previous === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = previous;
+    if (previousBrand === undefined) delete process.env.BRAND_VARIANT; else process.env.BRAND_VARIANT = previousBrand;
+  }
 });
 
 test('referral handlers reject missing authentication', async () => {
