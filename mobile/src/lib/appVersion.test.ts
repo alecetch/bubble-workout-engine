@@ -1,0 +1,13 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.unmock("./appVersion");
+const runtime = vi.hoisted(() => ({ native: { nativeBuildVersion: "17", nativeApplicationVersion: "1.2.3" }, constants: { executionEnvironment: "standalone" }, platform: { OS: "ios" } }));
+vi.mock("expo-application", () => runtime.native);
+vi.mock("expo-constants", () => ({ default: runtime.constants }));
+vi.mock("react-native", () => ({ Platform: runtime.platform }));
+beforeEach(() => { vi.resetModules(); vi.stubGlobal("__DEV__", false); runtime.native.nativeBuildVersion = "17"; runtime.constants.executionEnvironment = "standalone"; runtime.platform.OS = "ios"; });
+afterEach(() => vi.unstubAllGlobals());
+it("reads the native build once", async () => { const { getAppVersionInfo } = await import("./appVersion"); expect(getAppVersionInfo()).toEqual({ platform: "ios", version: "1.2.3", build: 17 }); runtime.native.nativeBuildVersion = "18"; expect(getAppVersionInfo().build).toBe(17); });
+it.each(["abc", "0", "-1", "1.5", "01", ""])("ignores invalid build %s", async build => { runtime.native.nativeBuildVersion = build; expect((await import("./appVersion")).getAppVersionInfo().build).toBeNull(); });
+it("never gates Expo Go", async () => { runtime.constants.executionEnvironment = "storeClient"; expect((await import("./appVersion")).getAppVersionInfo().build).toBeNull(); });
+it("never gates development", async () => { vi.stubGlobal("__DEV__", true); expect((await import("./appVersion")).getAppVersionInfo().build).toBeNull(); });
+it("maps Android and other platforms", async () => { runtime.platform.OS = "android"; expect((await import("./appVersion")).getAppVersionInfo().platform).toBe("android"); vi.resetModules(); runtime.platform.OS = "web"; expect((await import("./appVersion")).getAppVersionInfo().platform).toBe("other"); });

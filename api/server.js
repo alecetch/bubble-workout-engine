@@ -7,6 +7,7 @@ import { createMediaAssetsHandler } from "./src/routes/mediaAssets.js";
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
 import "dotenv/config";
+import { appConfigRouter } from "./src/routes/appConfig.js";
 import { getStartupEnvErrors } from "./src/startupEnv.js";
 import { validateProductionEnv } from "./src/config/validateProductionEnv.js";
 
@@ -403,6 +404,7 @@ const handleReferenceData = async (req, res) => {
 };
 
 // Canonical (new)
+app.use("/api", appConfigRouter);
 app.get("/api/reference-data", handleReferenceData);
 // DEPRECATED — remove after Bubble client updates to /api/reference-data
 app.get("/reference-data", handleReferenceData);

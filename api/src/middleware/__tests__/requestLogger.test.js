@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+import logger from "../../utils/logger.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { requestLogger } from "../requestLogger.js";
@@ -100,4 +102,13 @@ test("uses error level for 5xx responses", () => {
 
   assert.equal(calls[0].level, "error");
   assert.equal(calls[0].event, "http.request.finish");
+});
+
+test("finish logs include bounded app headers and omit missing fields", t => {
+ const logs = []; t.mock.method(logger, "child", () => ({ debug() {}, info: value => logs.push(value) }));
+ for (const headers of [{}, { "x-app-platform": "i".repeat(40), "x-app-version": "v".repeat(40), "x-app-build": "1".repeat(40) }]) {
+  const response = new EventEmitter(); response.statusCode = 200;
+  requestLogger({ headers, method: "GET", url: "/api/app-config" }, response, () => {}); response.emit("finish");
+ }
+ for (const field of ["app_platform", "app_version", "app_build"]) { assert.equal(field in logs[0], false); assert.equal(logs[1][field].length, 32); }
 });

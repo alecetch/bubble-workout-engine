@@ -92,6 +92,7 @@ export default defineConfig({
       {
         test: {
           name: "node-logic",
+          setupFiles: ["./vitest.node.setup.ts"],
           globals: true,
           environment: "node",
           include: ["src/**/*.test.ts"],

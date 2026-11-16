@@ -1,3 +1,4 @@
+import { getAppVersionInfo } from "../lib/appVersion";
 import { API_BASE_URL } from "./config";
 import { queryClient } from "./queryClient";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "./tokenStorage";
@@ -163,8 +164,12 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
 
   logger.api(`request ${method} ${url}`);
 
+  const version = getAppVersionInfo();
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
+    "X-App-Platform": version.platform,
+    "X-App-Version": version.version ?? "unknown",
+    "X-App-Build": version.build === null ? "unknown" : String(version.build),
     ...headers,
   };
 
@@ -376,6 +381,7 @@ export async function authPostFormData<T>(
   const url = `${API_BASE_URL}${normalizedPath}`;
   apiDiagnostics.lastAttemptedUrl = url;
 
+  const version = getAppVersionInfo();
   logger.api(`request POST ${url}`);
 
   let response: Response;
@@ -385,6 +391,9 @@ export async function authPostFormData<T>(
       method: "POST",
       headers: {
         Accept: "application/json",
+        "X-App-Platform": version.platform,
+        "X-App-Version": version.version ?? "unknown",
+        "X-App-Build": version.build === null ? "unknown" : String(version.build),
         Authorization: `Bearer ${accessToken}`,
       },
       body,

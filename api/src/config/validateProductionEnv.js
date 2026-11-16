@@ -1,3 +1,4 @@
+import { readAppVersionPolicy } from "./appVersionPolicy.js";
 import logger from "../utils/logger.js";
 import { isPhysiqueEnabled } from "./features.js";
 import { getBrand } from "./brand.js";
@@ -33,6 +34,12 @@ export function findLocalhostProductionEnvErrors(env = process.env) {
 }
 
 export function validateProductionEnv(env = process.env) {
+  if (env.NODE_ENV === "production") {
+    const policy = readAppVersionPolicy(env, { warn() {} });
+    for (const [platform, value] of Object.entries(policy)) {
+      if (value.min_build !== null && value.update_url === null) logger.warn({ event: "app_config.missing_update_url", platform }, `Mobile ${platform} minimum build has no update URL.`);
+    }
+  }
   if (env.NODE_ENV === "production" && env.REMINDER_SCHEDULER_ENABLED !== "true") {
     logger.warn("REMINDER_SCHEDULER_ENABLED is not set to true; workout reminders will not be sent automatically.");
   }

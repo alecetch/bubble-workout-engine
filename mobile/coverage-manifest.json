@@ -1102,6 +1102,14 @@
     },
     {
       "type": "component",
+      "source": "src/components/session/ForceUpdateScreen.tsx",
+      "test": "src/components/session/ForceUpdateScreen.component.test.tsx",
+      "status": "covered",
+      "tags": ["session"],
+      "reason": ""
+    },
+    {
+      "type": "component",
       "source": "src/components/session/SessionRestoreErrorScreen.tsx",
       "test": "src/components/session/SessionRestoreErrorScreen.component.test.tsx",
       "status": "covered",
