@@ -1,4 +1,5 @@
-FROM node:20
+ARG NODE_VERSION=24
+FROM node:${NODE_VERSION}
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -28,5 +29,5 @@ ENV PUPPETEER_CACHE_DIR=/opt/puppeteer-cache
 RUN mkdir /tmp/pp \
   && cd /tmp/pp \
   && npm init -y \
-  && npm install puppeteer@22.15.0 \
+  && npm install puppeteer@25.16.0 \
   && rm -rf /tmp/pp

@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
       - name: Check deployment paths
         id: changes
         run: node scripts/deploy-changes.mjs
@@ -62,9 +62,15 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: api/package-lock.json
+
+      - name: Check Node version pins
+        run: node scripts/check-node-version-pins.mjs
+
+      - name: Test Node version pin check
+        run: node --test scripts/__tests__/check-node-version-pins.test.mjs
 
       - name: Install API dependencies
         working-directory: api
@@ -199,7 +205,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 
@@ -379,7 +385,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
             api/package-lock.json
