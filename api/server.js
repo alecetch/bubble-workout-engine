@@ -1,4 +1,3 @@
-import { appConfigRouter } from "./src/routes/appConfig.js";
 import { shouldStartReminderScheduler, startWorkoutReminderScheduler } from "./src/services/workoutReminderJob.js";
 import { requireEntitlement } from "./src/middleware/requireEntitlement.js";
 import { requirePremium } from "./src/middleware/requirePremium.js";
@@ -8,6 +7,7 @@ import { createMediaAssetsHandler } from "./src/routes/mediaAssets.js";
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
 import "dotenv/config";
+import { appConfigRouter } from "./src/routes/appConfig.js";
 import { getStartupEnvErrors } from "./src/startupEnv.js";
 import { validateProductionEnv } from "./src/config/validateProductionEnv.js";
 
