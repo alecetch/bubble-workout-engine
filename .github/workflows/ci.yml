@@ -30,7 +30,7 @@ jobs:
   # The local reusable workflow runs at this same commit. Default success()
   # semantics deliberately block deployment on failed, cancelled or skipped CI.
   deploy:
-    needs: [test, e2e, native-drift-check, deploy-changes]
+    needs: [test, e2e, native-drift-check, prod-image, deploy-changes]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.deploy-changes.outputs.required == 'true'
     permissions:
       contents: read
@@ -69,6 +69,10 @@ jobs:
       - name: Install API dependencies
         working-directory: api
         run: npm ci
+
+      - name: Check runtime dependencies
+        working-directory: api
+        run: node scripts/check-runtime-deps.mjs
 
       - name: Run Flyway migrations
         run: |
@@ -143,6 +147,49 @@ jobs:
         run: |
           npm ci
           npm test
+
+  prod-image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smoke
+          POSTGRES_PASSWORD: smoke-db-password-ci-only
+          POSTGRES_DB: smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build production image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          push: false
+          tags: api-prod:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Migrate smoke database with Flyway
+        run: |
+          docker run --rm \
+            --network host \
+            -v "${{ github.workspace }}/migrations:/flyway/sql" \
+            flyway/flyway:10 \
+            -url="jdbc:postgresql://127.0.0.1:5432/smoke" \
+            -user=smoke \
+            -password=smoke-db-password-ci-only \
+            -locations=filesystem:/flyway/sql \
+            migrate
+      - name: Smoke production image
+        run: bash scripts/ci/prod-image-smoke.sh
 
   native-drift-check:
     runs-on: ubuntu-latest

@@ -22,7 +22,7 @@ test('same-commit caller requires every CI gate without overriding failure handl
   const ci = workflow('ci');
   const deploy = ci.jobs.deploy;
   assert.equal(deploy.uses, './.github/workflows/fly-deploy.yml');
-  assert.deepEqual([...deploy.needs].sort(), ['deploy-changes', 'e2e', 'native-drift-check', 'test']);
+  assert.deepEqual([...deploy.needs].sort(), ['deploy-changes', 'e2e', 'native-drift-check', 'prod-image', 'test']);
   assert.equal(deploy.if, "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.deploy-changes.outputs.required == 'true'");
   // No always()/!cancelled()/continue-on-error may turn failed gates into a deploy.
   for (const name of deploy.needs) assert.equal(ci.jobs[name]['continue-on-error'], undefined);
