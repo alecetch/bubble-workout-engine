@@ -9,6 +9,7 @@ import { buildMobileLandingPage } from "./sharePack/mobileLandingBuilder.js";
 import { safeLogCalculatorEvent } from "./sharePack/eventLogger.js";
 
 const APP_DOMAIN = process.env.APP_DOMAIN ?? "http://localhost:3000";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function shareUrl(shareToken) {
   return `${APP_DOMAIN.replace(/\/$/, "")}/hyrox/share/${shareToken}`;
@@ -67,8 +68,10 @@ export function createSharePackHandlers(db = pool, deps = {}) {
   async function sendPackEmail(req, res) {
     try {
       const { submissionId } = req.params;
-      const email = String(req.body?.email ?? "").trim();
-      if (!email) return res.status(400).json({ error: "email is required" });
+      if (!UUID_RE.test(submissionId)) return res.status(404).json({ sent: false, error: "Submission not found" });
+      const submission = await db.query("SELECT email FROM hyrox_submissions WHERE id = $1", [submissionId]);
+      const email = submission.rows[0]?.email?.trim();
+      if (!email) return res.status(404).json({ sent: false, error: "Submission not found" });
       const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
 
       await logRequestEvent({ submissionId, sessionId, eventName: "pack_requested", metadata: { trigger: "email" } });
@@ -92,7 +95,7 @@ export function createSharePackHandlers(db = pool, deps = {}) {
 
       return res.json({ sent: true });
     } catch (err) {
-      req.log?.error?.({ event: "hyrox.share_pack.email_error", err: err?.message });
+      req.log?.error?.({ event: "hyrox.share_pack.email_error" });
       return res.status(500).json({ sent: false, error: err.message });
     }
   }

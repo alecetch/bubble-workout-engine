@@ -3,6 +3,22 @@ import { RUN_KEYS, STATION_KEYS } from "./config/segmentMap.js";
 import { formatSecondsToTime } from "./ingestion/timeParser.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function createShareEmailRateLimiters({
+  ipMax = Number(process.env.HYROX_SHARE_EMAIL_RATE_LIMIT_PER_HOUR || 10),
+  submissionMax = Number(process.env.HYROX_SHARE_EMAIL_SUBMISSION_LIMIT_PER_HOUR || 3),
+} = {}) {
+  const options = { windowMs: 60 * 60 * 1000, standardHeaders: true, legacyHeaders: false,
+    message: { error: "too_many_requests" } };
+  return {
+    hyroxShareEmailIpRateLimiter: rateLimit({ ...options, max: ipMax }),
+    hyroxShareEmailSubmissionRateLimiter: rateLimit({ ...options, max: submissionMax,
+      keyGenerator: req => `share-email:${req.params.submissionId.toLowerCase()}`,
+    }),
+  };
+}
+
+export const { hyroxShareEmailIpRateLimiter, hyroxShareEmailSubmissionRateLimiter } = createShareEmailRateLimiters();
 const VALID_DIVISIONS = new Set(["open", "pro", "doubles", "mixed_doubles", "relay"]);
 const REQUIRED_COMPLETE_KEYS = Object.freeze([...RUN_KEYS, ...STATION_KEYS]);
 
