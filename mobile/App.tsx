@@ -1,3 +1,6 @@
+import { useVersionGate } from "./src/lib/useVersionGate";
+import { isStartupReady, maybeShowSoftUpdate, selectRootView } from "./src/lib/versionGatePresentation";
+import { ForceUpdateScreen } from "./src/components/session/ForceUpdateScreen";
 import { clearDisabledPhysiqueUpload } from "./src/utils/physiqueStartup";
 import "react-native-gesture-handler";
 import React from "react";
@@ -7,7 +10,7 @@ import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, View } from "react-native";
 import { queryClient } from "./src/api/queryClient";
 import { AuthNavigator } from "./src/navigation/AuthNavigator";
 import { AppTabs } from "./src/navigation/AppTabs";
@@ -92,7 +95,22 @@ function App(): React.JSX.Element {
   logger.boot("render", { isAuthenticated, hasUserId: Boolean(userId), entryRoute });
 
   const sessionRestoration = useSessionRestoration();
-  useHideSplashWhenReady(sessionRestoration.state !== "restoring");
+  const versionGate = useVersionGate();
+  useHideSplashWhenReady(isStartupReady(versionGate.state, sessionRestoration.state));
+  const rootView = selectRootView(versionGate.state, sessionRestoration.state);
+  const [navigationReady, setNavigationReady] = React.useState(0);
+  React.useEffect(() => {
+    if (!isAuthenticated || sessionRestoration.state !== "ready") return;
+    void maybeShowSoftUpdate(versionGate, {
+      getRoute: () => {
+        if (!navigationRef.isReady()) return {};
+        const root = navigationRef.getRootState();
+        return { name: navigationRef.getCurrentRoute()?.name, tab: root.routes[root.index ?? 0]?.name };
+      },
+      show: (title, body, buttons) => Alert.alert(title, body, buttons),
+      openUrl: url => Linking.openURL(url),
+    });
+  }, [versionGate, navigationReady, isAuthenticated, sessionRestoration.state]);
   const physiqueQueueCleared = React.useRef(false);
   React.useEffect(() => {
     if (["restoring", "unreachable"].includes(sessionRestoration.state) || physiqueQueueCleared.current) return;
@@ -212,14 +230,16 @@ function App(): React.JSX.Element {
     flushPendingNotificationResponse();
   }, [isAuthenticated]);
 
-  if (sessionRestoration.state === "unreachable") {
+  if (rootView === "force_update") return <ForceUpdateScreen updateUrl={versionGate.updateUrl} />;
+
+  if (rootView === "unreachable") {
     return <QueryClientProvider client={queryClient}>
       <SessionRestoreErrorScreen onRetry={() => { void sessionRestoration.retry(); }}
         onSignOut={() => { void sessionRestoration.signOut(); }} isRetrying={sessionRestoration.isRetrying} />
     </QueryClientProvider>;
   }
 
-  if (sessionRestoration.state === "restoring") {
+  if (rootView === "restoring") {
     return <View style={{ flex: 1, justifyContent: "center", backgroundColor: colors.background }}>
       <ActivityIndicator accessibilityLabel="Restoring session" />
     </View>;
@@ -231,7 +251,7 @@ function App(): React.JSX.Element {
       <NavigationContainer
         theme={appTheme}
         ref={navigationRef}
-        onReady={flushPendingNotificationResponse}
+        onReady={() => { flushPendingNotificationResponse(); setNavigationReady(value => value + 1); }}
       >
         <StatusBar style="light" />
         <ErrorBoundary

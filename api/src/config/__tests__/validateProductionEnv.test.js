@@ -107,3 +107,10 @@ test("production warns when reminder scheduler is disabled", () => {
     assert.equal(warnings.length, 1); assert.match(warnings[0], /REMINDER_SCHEDULER_ENABLED/);
   } finally { logger.warn = original; }
 });
+
+
+test("minimum build with no update URL warns by platform without failing", t => {
+ const warnings = []; t.mock.method(logger, "warn", (...args) => warnings.push(args));
+ assert.doesNotThrow(() => validateProductionEnv({ NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true", MOBILE_MIN_BUILD_IOS: "17" }));
+ assert.equal(warnings.length, 1); assert.equal(warnings[0][0].platform, "ios");
+});

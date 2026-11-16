@@ -1,3 +1,4 @@
+import { appConfigRouter } from "./src/routes/appConfig.js";
 import { shouldStartReminderScheduler, startWorkoutReminderScheduler } from "./src/services/workoutReminderJob.js";
 import { requireEntitlement } from "./src/middleware/requireEntitlement.js";
 import { requirePremium } from "./src/middleware/requirePremium.js";
@@ -403,6 +404,7 @@ const handleReferenceData = async (req, res) => {
 };
 
 // Canonical (new)
+app.use("/api", appConfigRouter);
 app.get("/api/reference-data", handleReferenceData);
 // DEPRECATED — remove after Bubble client updates to /api/reference-data
 app.get("/reference-data", handleReferenceData);

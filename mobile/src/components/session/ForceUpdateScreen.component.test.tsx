@@ -1,0 +1,12 @@
+import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { BackHandler, Linking, Platform } from "react-native";
+import { beforeEach, expect, it, vi } from "vitest";
+import { BRAND_WORDMARK } from "../../config/brand";
+import { ForceUpdateScreen } from "./ForceUpdateScreen";
+vi.mock("react-native", async importActual => { const actual = await importActual<typeof import("react-native")>(); return { ...actual, BackHandler: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }; });
+beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Linking, "openURL").mockResolvedValue(undefined); });
+it("shows approved copy and opens Update", async () => { render(<ForceUpdateScreen updateUrl="https://store.test" />); expect(screen.getByRole("heading", { name: "Update required" })).toBeInTheDocument(); expect(screen.getByText(`This version of ${BRAND_WORDMARK} is no longer supported. Update to keep training. Your workouts and progress are saved to your account.`)).toBeInTheDocument(); fireEvent.click(screen.getByLabelText("Update")); await waitFor(() => expect(Linking.openURL).toHaveBeenCalledWith("https://store.test")); });
+it("null URL shows store fallback without a button", () => { render(<ForceUpdateScreen updateUrl={null} />); expect(screen.getByText(`Open the ${Platform.OS === "android" ? "Google Play" : "App Store"} and update ${BRAND_WORDMARK}.`)).toBeInTheDocument(); expect(screen.queryByLabelText("Update")).not.toBeInTheDocument(); });
+it("failed store open switches to fallback", async () => { vi.mocked(Linking.openURL).mockRejectedValue(new Error("unsupported")); render(<ForceUpdateScreen updateUrl="https://store.test" />); fireEvent.click(screen.getByLabelText("Update")); await waitFor(() => expect(screen.queryByLabelText("Update")).not.toBeInTheDocument()); expect(screen.getByText(/Open the/)).toBeInTheDocument(); });
+it("consumes hardware back and unregisters on unmount", () => { const { unmount } = render(<ForceUpdateScreen updateUrl={null} />); const handler = vi.mocked(BackHandler.addEventListener).mock.calls[0]; expect(handler[0]).toBe("hardwareBackPress"); expect(handler[1]({} as never)).toBe(true); unmount(); expect(vi.mocked(BackHandler.addEventListener).mock.results[0].value.remove).toHaveBeenCalled(); });

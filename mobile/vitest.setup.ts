@@ -383,3 +383,5 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     })),
   };
 });
+
+vi.mock("expo-application", () => ({ nativeApplicationVersion: "1.0.0", nativeBuildVersion: "1" }));
