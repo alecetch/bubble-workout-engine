@@ -7,6 +7,18 @@ function fixture(token = "test", missing = false) {
   return { queries, service: makeNotificationService(db) };
 }
 const message = { userId: "u1", title: "T", body: "B" };
+test('transactional push bypasses an already claimed daily slot without changing preferences', async t => {
+  const queries = [];
+  const db = { async query(sql) { queries.push(sql); return { rows: sql.includes('SELECT') ? [{ device_push_token: 'test' }] : [] }; } };
+  let sends = 0;
+  t.mock.method(globalThis, 'fetch', async () => { sends++; return { json: async () => ({ data: { status: 'ok' } }) }; });
+  const service = makeNotificationService(db);
+  assert.deepEqual(await service.send(message), { sent: false, reason: 'capped_or_disabled' });
+  queries.length = 0;
+  assert.deepEqual(await service.send({ ...message, transactional: true }), { sent: true });
+  assert.equal(sends, 1); assert.equal(queries.length, 1); assert.match(queries[0], /SELECT/);
+  assert.ok(!queries.some(sql => /INSERT|UPDATE/.test(sql)));
+});
 test("push success returns sent true", async t => {
   let calls = 0; t.mock.method(globalThis, "fetch", async () => { calls++; return { json: async () => ({ data: { status: "ok" } }) }; });
   const f = fixture(); assert.deepEqual(await f.service.send(message), { sent: true }); assert.equal(calls, 1); assert.equal(f.queries.length, 2);

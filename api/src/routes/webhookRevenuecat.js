@@ -4,6 +4,9 @@ import { pool } from "../db.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { syncUserEntitlement } from "../services/revenuecatSync.js";
 
+import { makeReferralRewardService } from "../services/referralRewardService.js";
+import logger from "../utils/logger.js";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTIVE_EVENTS = new Set(["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "PRODUCT_CHANGE"]);
 const HANDLED_EVENTS = new Set([...ACTIVE_EVENTS, "CANCELLATION", "BILLING_ISSUE", "EXPIRATION", "TRANSFER"]);
@@ -19,7 +22,7 @@ function validTimestamp(value) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 8.64e15;
 }
 
-export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syncUserEntitlement, syncDeps = {} } = {}) {
+export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syncUserEntitlement, syncDeps = {}, referralRewards = makeReferralRewardService({ db, log: entry => logger.info(entry) }) } = {}) {
   return async function webhookRevenuecatHandler(req, res) {
     if (!authorized(req.headers["x-revenuecat-signature"] ?? req.headers.authorization, process.env.REVENUECAT_WEBHOOK_SECRET)) {
       return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -84,6 +87,10 @@ export function createWebhookRevenuecatHandler(db, { syncUserEntitlementFn = syn
           reason ??= exists ? "stale_event" : "unknown_user";
           if (!exists) req.log?.warn?.({ event: "revenuecat.webhook.unknown_user", userId: id, type }, "Unknown RevenueCat user");
         }
+      }
+      if (type !== "TRANSFER") {
+        try { await referralRewards.recordWebhookEvent(event); }
+        catch { req.log?.warn?.({ event: "referral.conversion.record_failed", type }); }
       }
       // A transient upstream failure must not be acknowledged, or RevenueCat drops the transfer.
       // Retries are safe: targets already synced for this event are skipped as stale.

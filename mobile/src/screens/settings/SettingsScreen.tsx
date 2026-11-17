@@ -1,3 +1,4 @@
+import { formatReferralStats } from "../../utils/referralStats";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -243,13 +244,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     return referenceDataQuery.data?.equipmentPresets.find((preset) => preset.code === presetCode)?.label ?? "Not set";
   }, [profileQuery.data?.equipmentPreset, referenceDataQuery.data?.equipmentPresets]);
 
-  const referralStatsLabel = useMemo(() => {
-    if (!referralStatsQuery.data || referralStatsQuery.data.totalReferrals <= 0) return null;
-    const stats = referralStatsQuery.data;
-    return `${stats.totalReferrals} referred · ${stats.conversions} converted${
-      stats.rewardsGranted > 0 ? ` · ${stats.rewardsGranted} rewards` : ""
-    }`;
-  }, [referralStatsQuery.data]);
+  const referralStatsLabel = formatReferralStats(referralStatsQuery.data);
 
   const handleLogout = async (): Promise<void> => {
     const refreshToken = await getRefreshToken();
@@ -428,7 +423,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               <>
                 <SettingsRow
                   label="Your referral code"
-                  description={`Share ${BRAND_WORDMARK} with a friend. Get a free month when they subscribe.`}
+                  description={`Share ${BRAND_WORDMARK} with a friend. When they become a paying subscriber, you get a free month (up to 2 a year).`}
                   value={referralQuery.data.code}
                   showDivider
                 />

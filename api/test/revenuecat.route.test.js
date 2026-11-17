@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createWebhookRevenuecatHandler } from "../src/routes/webhookRevenuecat.js";
 import { randomUUID } from "node:crypto";
 import { computeEntitlement } from "../src/services/entitlement.js";
+import { makeReferralRewardService } from '../src/services/referralRewardService.js';
 import { DATABASE_SKIP, future, past, closeDb, withUsers, paidSubscriber, rcFetch } from "../testSupport/entitlementFixtures.js";
 
 const ORIGINAL_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
@@ -55,6 +56,27 @@ test.after(() => {
   process.env.REVENUECAT_WEBHOOK_SECRET = ORIGINAL_SECRET;
 });
 test.after(closeDb);
+
+test('qualifying webhook records pending conversion without changing response', { skip: DATABASE_SKIP }, () => withUsers(async (db, [referrer, referred]) => {
+  await db.query("INSERT INTO referral_conversion(referrer_user_id,referred_user_id,referred_code) VALUES ($1,$2,'CODE')", [referrer, referred]);
+  const res = mockRes(); const req = validReq('INITIAL_PURCHASE', { app_user_id: referred, environment: 'PRODUCTION', period_type: 'NORMAL', id: randomUUID() });
+  await makeHandler(db, { referralRewards: makeReferralRewardService({ db }) })(req, res);
+  assert.equal(res.statusCode, 200); assert.deepEqual(res.body, { ok: true, handled: true, type: 'INITIAL_PURCHASE', new_status: 'active' });
+  assert.equal((await db.query('SELECT reward_status FROM referral_conversion WHERE referred_user_id=$1', [referred])).rows[0].reward_status, 'pending');
+}));
+
+test('referral hook runs on stale events and failures leave webhook response unchanged', async () => {
+  for (const stale of [false, true]) {
+    let calls = 0; const warnings = [];
+    const db = { query: async sql => sql.startsWith('UPDATE') ? { rowCount: stale ? 0 : 1, rows: [] } : { rows: [{ id: USER_UUID }] } };
+    const referralRewards = { async recordWebhookEvent() { calls++; throw Error('referral failed'); } };
+    const req = validReq('INITIAL_PURCHASE'); req.log = { warn: x => warnings.push(x) };
+    const res = mockRes(); await makeHandler(db, { referralRewards })(req, res);
+    assert.equal(calls, 1); assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, stale ? { ok: true, handled: false, type: 'INITIAL_PURCHASE', reason: 'stale_event' } : { ok: true, handled: true, type: 'INITIAL_PURCHASE', new_status: 'active' });
+    assert.deepEqual(warnings, [{ event: 'referral.conversion.record_failed', type: 'INITIAL_PURCHASE' }]);
+  }
+});
 
 test("revenuecat webhook: missing signature header returns 401", async () => {
   const handler = makeHandler();

@@ -138,7 +138,7 @@ export function checkWebsiteBrandStrings(repoRoot) {
 // Counts left by the forma variant. Lower these, never raise them; the clean-up PR removes them.
 export const WEBSITE_BRAND_BASELINE = Object.freeze({
   "api/src/routes/marketingPages.js": 3,
-  "api/src/routes/referral.js": 1,
+  "api/src/routes/referral.js": 0,
   "api/src/routes/websiteEnhancements.js": 1,
 });
 

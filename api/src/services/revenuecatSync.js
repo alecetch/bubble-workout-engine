@@ -8,6 +8,48 @@ function syncError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+async function rewardRequest(appUserId, path, body, {
+  fetchImpl = fetch, apiKey = process.env.REVENUECAT_SECRET_API_KEY, timeoutMs = SUBSCRIBER_TIMEOUT_MS,
+} = {}) {
+  if (!apiKey?.trim()) return { skipped: true };
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Request timed out')); }, timeoutMs); }),
+      (async () => {
+        const response = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}/${path.map(encodeURIComponent).join('/')}`, {
+          method: 'POST', headers: { Authorization: `Bearer ${apiKey.trim()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body), signal: controller.signal,
+        });
+        if (response.status === 200 || response.status === 201) return { skipped: false };
+        const payload = await response.json().catch(() => ({}));
+        const temporary = response.status === 429 || response.status >= 500;
+        throw Object.assign(new Error('RevenueCat reward request failed'), {
+          code: temporary ? 'revenuecat_temporary' : 'revenuecat_permanent',
+          detail: { status: response.status, code: String(payload.code ?? '').slice(0, 200), message: String(payload.message ?? '').slice(0, 200) },
+        });
+      })(),
+    ]);
+  } catch (err) {
+    if (err.code === 'revenuecat_temporary' || err.code === 'revenuecat_permanent') throw err;
+    // Never retain/log upstream bodies, credentials or potentially sensitive network messages.
+    throw Object.assign(new Error('RevenueCat reward request unavailable'), { code: 'revenuecat_temporary', detail: { status: null } });
+  } finally { clearTimeout(timer); }
+}
+
+export function grantPromotionalEntitlement(appUserId, entitlementId, { endTimeMs, ...deps } = {}) {
+  return rewardRequest(appUserId, ['entitlements', entitlementId, 'promotional'], { end_time_ms: endTimeMs }, deps);
+}
+
+export function extendAppleSubscription(appUserId, transactionId, { days = 30, reasonCode = 1, ...deps } = {}) {
+  return rewardRequest(appUserId, ['subscriptions', transactionId, 'extend'], { extend_by_days: days, extend_reason_code: reasonCode }, deps);
+}
+
+export function deferGoogleSubscription(appUserId, subscriptionId, { days = 30, ...deps } = {}) {
+  return rewardRequest(appUserId, ['subscriptions', subscriptionId, 'defer'], { extend_by_days: days }, deps);
+}
+
 export async function fetchSubscriber(appUserId, {
   fetchImpl = fetch, apiKey = process.env.REVENUECAT_SECRET_API_KEY, timeoutMs = SUBSCRIBER_TIMEOUT_MS,
 } = {}) {

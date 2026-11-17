@@ -32,6 +32,12 @@ async function get(path, { preview = false } = {}) {
   });
 }
 
+test('Terms explain qualifying referral rewards and the yearly limit', async () => {
+  const { response, body } = await get('/terms');
+  assert.equal(response.status, 200);
+  for (const phrase of ['4. Referral Programme', 'up to 2', 'paying subscriber', '7 days', '30 days', 'refunded']) assert.ok(body.includes(phrase), phrase);
+});
+
 test("GET / returns HTML with Forma and calculator copy", async () => {
   const { response, body } = await get("/");
   assert.equal(response.status, 200);

@@ -69,13 +69,13 @@ test("GET referral-code lazily generates and persists a code when none exists", 
   assert.ok(updateCalled, "expected UPDATE to persist the new code");
 });
 
-test("GET referral-code returns 500 when no user_id in token", async () => {
+test("GET referral-code returns 401 when no user_id in token", async () => {
   const db = { async query() { throw new Error("should not be called"); } };
   const res = makeRes();
 
   await createReferralCodeHandler(db)(makeReq({ auth: {} }), res);
 
-  assert.equal(res.statusCode, 500);
+  assert.equal(res.statusCode, 401);
   assert.equal(res.body.ok, false);
 });
 
@@ -95,13 +95,17 @@ test("GET referral-stats returns zero counts when user has no referrals", async 
     totalReferrals: 0,
     conversions: 0,
     rewardsGranted: 0,
+    rewardsPending: 0,
+    rewardsCapped: 0,
+    rewardCapPerYear: 2,
+    rewardsRemainingThisYear: 2,
   });
 });
 
 test("GET referral-stats returns correct counts when conversions exist", async () => {
   const db = {
     async query() {
-      return { rows: [{ total_referrals: "3", conversions: "2", rewards_granted: "1" }] };
+      return { rows: [{ total_referrals: "3", conversions: "2", rewards_granted: "1", rewards_pending: "1", rewards_capped: "0", granted_this_year: "1" }] };
     },
   };
 
@@ -114,6 +118,10 @@ test("GET referral-stats returns correct counts when conversions exist", async (
     totalReferrals: 3,
     conversions: 2,
     rewardsGranted: 1,
+    rewardsPending: 1,
+    rewardsCapped: 0,
+    rewardCapPerYear: 2,
+    rewardsRemainingThisYear: 1,
   });
 });
 
@@ -132,12 +140,12 @@ test("GET referral-stats queries only for the authenticated user (isolation)", a
   assert.ok(capturedParams?.includes("user-xyz"), "query must be scoped to the requesting user");
 });
 
-test("GET referral-stats returns 500 when no user_id in token", async () => {
+test("GET referral-stats returns 401 when no user_id in token", async () => {
   const db = { async query() { throw new Error("should not be called"); } };
   const res = makeRes();
 
   await createReferralStatsHandler(db)(makeReq({ auth: {} }), res);
 
-  assert.equal(res.statusCode, 500);
+  assert.equal(res.statusCode, 401);
   assert.equal(res.body.ok, false);
 });
