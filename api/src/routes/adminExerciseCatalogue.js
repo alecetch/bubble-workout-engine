@@ -524,20 +524,19 @@ async function getFullState(forceRefresh = false) {
 
   const client = await pool.connect();
   try {
-    const [exRes, eqRes, cfgRes] = await Promise.all([
-      // exercise_id breaks ties so the Flyway snapshot order is deterministic.
-      client.query('SELECT * FROM exercise_catalogue ORDER BY movement_class, name, exercise_id COLLATE "C"'),
-      client.query(`
+    // pg deprecates overlapping queries on a single connection.
+    // exercise_id breaks ties so the Flyway snapshot order is deterministic.
+    const exRes = await client.query('SELECT * FROM exercise_catalogue ORDER BY movement_class, name, exercise_id COLLATE "C"');
+    const eqRes = await client.query(`
         SELECT DISTINCT exercise_slug, name, category,
           no_equipment, minimal_equipment, decent_home_gym, commercial_gym, crossfit_hyrox_gym
         FROM equipment_items ORDER BY exercise_slug
-      `),
-      client.query(`
+      `);
+    const cfgRes = await client.query(`
         SELECT config_key, program_type, program_generation_config_json
         FROM public.program_generation_config
         WHERE is_active = true ORDER BY program_type, config_key
-      `),
-    ]);
+      `);
 
     const exercises = exRes.rows;
 

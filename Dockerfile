@@ -1,5 +1,6 @@
+ARG NODE_VERSION=24
 # Stage 1: build the React frontend
-FROM node:20-alpine AS web-build
+FROM node:${NODE_VERSION}-alpine AS web-build
 WORKDIR /web
 COPY web/package*.json ./
 RUN npm ci
@@ -8,7 +9,7 @@ COPY web/ .
 RUN npm run build
 
 # Stage 2: production API image
-FROM node:20-alpine
+FROM node:${NODE_VERSION}-alpine
 WORKDIR /app
 
 # Chromium + runtime libs for Puppeteer (carousel slide generation).
