@@ -2,6 +2,16 @@ import logger from "../../utils/logger.js";
 import { getBrand } from "../brand.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+test('production warns but starts with missing/short password reset HMAC secret', t => {
+  const warnings=[];t.mock.method(logger,'warn',(...args)=>warnings.push(args));
+  for(const secret of [undefined,'short']) {
+    warnings.length=0;
+    assert.doesNotThrow(()=>validateProductionEnv({NODE_ENV:'production',APP_DOMAIN:'https://200days.app',PASSWORD_RESET_HMAC_SECRET:secret}));
+    assert.ok(warnings.some(([entry])=>entry?.event==='auth.password_reset.hmac_fallback'));
+  }
+  warnings.length=0;validateProductionEnv({NODE_ENV:'production',APP_DOMAIN:'https://200days.app',PASSWORD_RESET_HMAC_SECRET:'x'.repeat(32)});
+  assert.ok(!warnings.some(([entry])=>entry?.event==='auth.password_reset.hmac_fallback'));
+});
 test('referral rewards warn for missing key and production sandbox', t => {
   const warnings = [];
   t.mock.method(logger, 'warn', (...args) => warnings.push(args));
@@ -96,7 +106,7 @@ test("physique startup warning requires enabled production flag and a missing ke
   const warnings = [];
   logger.warn = message => warnings.push(message);
   try {
-    const base = { NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true" };
+    const base = { NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true", PASSWORD_RESET_HMAC_SECRET: "x".repeat(32) };
     for (const PHYSIQUE_ENABLED of [undefined, "false", "TRUE"]) validateProductionEnv({ ...base, PHYSIQUE_ENABLED });
     validateProductionEnv({ ...base, PHYSIQUE_ENABLED: "true", OPENAI_API_KEY: "test-key" });
     assert.equal(warnings.length, 0);
@@ -110,7 +120,7 @@ test("production warns when reminder scheduler is disabled", () => {
   const original = logger.warn, warnings = [];
   logger.warn = message => warnings.push(message);
   try {
-    const base = { APP_DOMAIN: "https://example.test", NODE_ENV: "production" };
+    const base = { APP_DOMAIN: "https://example.test", NODE_ENV: "production", PASSWORD_RESET_HMAC_SECRET: "x".repeat(32) };
     validateProductionEnv({ ...base, REMINDER_SCHEDULER_ENABLED: "true" });
     validateProductionEnv({ ...base, NODE_ENV: "test" });
     assert.equal(warnings.length, 0);
@@ -122,6 +132,6 @@ test("production warns when reminder scheduler is disabled", () => {
 
 test("minimum build with no update URL warns by platform without failing", t => {
  const warnings = []; t.mock.method(logger, "warn", (...args) => warnings.push(args));
- assert.doesNotThrow(() => validateProductionEnv({ NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true", MOBILE_MIN_BUILD_IOS: "17" }));
+ assert.doesNotThrow(() => validateProductionEnv({ NODE_ENV: "production", APP_DOMAIN: "https://example.test", REMINDER_SCHEDULER_ENABLED: "true", PASSWORD_RESET_HMAC_SECRET: "x".repeat(32), MOBILE_MIN_BUILD_IOS: "17" }));
  assert.equal(warnings.length, 1); assert.equal(warnings[0][0].platform, "ios");
 });

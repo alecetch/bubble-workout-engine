@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createHash, randomBytes } from "node:crypto";
 import { generateReferralCode } from "../utils/referralCode.js";
+import { makeAuthThrottle, accountKeyForUser, accountKeyForEmail, PASSWORD_THROTTLED } from './authThrottle.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_ISSUER = process.env.JWT_ISSUER;
@@ -148,7 +149,7 @@ export async function registerUser(db, { email, password, referredByCode = null 
   };
 }
 
-export async function loginUser(db, { email, password }) {
+export async function loginUser(db, { email, password }, { throttle = makeAuthThrottle({ db }) } = {}) {
   const { normalizedEmail, textPassword } = validateEmailAndPassword(email, password);
 
   const userResult = await db.query(
@@ -161,7 +162,10 @@ export async function loginUser(db, { email, password }) {
     [normalizedEmail],
   );
 
+  const accountKey = userResult.rows[0] ? accountKeyForUser(userResult.rows[0].id) : accountKeyForEmail(normalizedEmail);
+  if (!(await throttle.checkPasswordAttempts(accountKey)).allowed) throw PASSWORD_THROTTLED;
   if (userResult.rowCount === 0) {
+    await throttle.notePasswordFailure(accountKey);
     throw { code: "invalid_credentials", message: "Invalid email or password" };
   }
 
@@ -169,6 +173,7 @@ export async function loginUser(db, { email, password }) {
   const passwordHash = userRow.password_hash || "";
   const isValidPassword = await bcrypt.compare(textPassword, passwordHash);
   if (!isValidPassword) {
+    await throttle.notePasswordFailure(accountKey);
     throw { code: "invalid_credentials", message: "Invalid email or password" };
   }
 

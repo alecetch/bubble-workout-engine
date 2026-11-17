@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { pool } from "../src/db.js";
+import { hashResetCode } from '../src/services/emailService.js';
 process.env.JWT_SECRET ??= "refresh-route-test-secret-at-least-32-characters";
 process.env.JWT_ISSUER ??= "refresh-route-tests";
 const { registerUser, refreshTokens, sha256Hex } = await import("../src/services/authService.js");
@@ -96,7 +97,7 @@ test("logout deletes the supplied token immediately even during reuse grace", t 
 test("password reset deletes rotated and replacement tokens immediately", t => fixture(t, async ({ user, request }) => {
   const rotated = await request("refresh");
   const code = "123456";
-  await pool.query("INSERT INTO password_reset_token(user_id,code_hash,expires_at) VALUES ($1,$2,now()+interval '10 minutes')", [user.userId, sha256Hex(code)]);
+  await pool.query("INSERT INTO password_reset_token(user_id,code_hash,expires_at) VALUES ($1,$2,now()+interval '10 minutes')", [user.userId, hashResetCode(code)]);
   const email = (await pool.query("SELECT email FROM app_user WHERE id=$1", [user.userId])).rows[0].email;
   const response = await request("reset-password", user.refreshToken, { email, code, new_password: "AnotherPassword123!" });
   assert.equal(response.status, 200, JSON.stringify(response.body));

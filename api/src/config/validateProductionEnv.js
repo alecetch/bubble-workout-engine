@@ -34,6 +34,9 @@ export function findLocalhostProductionEnvErrors(env = process.env) {
 }
 
 export function validateProductionEnv(env = process.env) {
+  if (env.NODE_ENV === 'production' && (!env.PASSWORD_RESET_HMAC_SECRET || env.PASSWORD_RESET_HMAC_SECRET.length < 32)) {
+    logger.warn({ event: 'auth.password_reset.hmac_fallback' }, 'PASSWORD_RESET_HMAC_SECRET is missing or short; using the JWT-derived fallback.');
+  }
   if (env.NODE_ENV === "production") {
     const policy = readAppVersionPolicy(env, { warn() {} });
     for (const [platform, value] of Object.entries(policy)) {

@@ -1,4 +1,5 @@
 import { shouldStartReferralRewardJob, startReferralRewardJob } from "./src/services/referralRewardJob.js";
+import { startRateLimitCleanup } from './src/middleware/pgRateLimitStore.js';
 import { shouldStartReminderScheduler, startWorkoutReminderScheduler } from "./src/services/workoutReminderJob.js";
 import { requireEntitlement } from "./src/middleware/requireEntitlement.js";
 import { requirePremium } from "./src/middleware/requirePremium.js";
@@ -683,6 +684,7 @@ app.use((err, req, res, next) => {
 });
 
 let reminderScheduler;
+const rateLimitCleanup = startRateLimitCleanup({ db: pool });
 let referralRewardJob;
 const port = Number(process.env.PORT || 3000);
 const server = app.listen(port, "0.0.0.0", () => {
@@ -713,6 +715,7 @@ async function gracefulShutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   reminderScheduler?.stop();
+  rateLimitCleanup.stop();
   referralRewardJob?.stop();
   logger.info({ event: "server.shutdown.start", signal }, "Shutting down API");
   try {
