@@ -1,0 +1,90 @@
+{
+  "android": {
+    "allowed": [
+      "android.permission.INTERNET",
+      "android.permission.VIBRATE",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.CHANGE_WIFI_MULTICAST_STATE",
+      "android.permission.ACCESS_LOCAL_NETWORK",
+      "android.permission.CAMERA",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.WAKE_LOCK",
+      "android.permission.USE_BIOMETRIC",
+      "android.permission.USE_FINGERPRINT",
+      "com.google.android.c2dm.permission.RECEIVE",
+      "com.android.vending.BILLING",
+      "fit.get200days.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE",
+      "com.sec.android.provider.badge.permission.READ",
+      "com.sec.android.provider.badge.permission.WRITE",
+      "com.htc.launcher.permission.READ_SETTINGS",
+      "com.htc.launcher.permission.UPDATE_SHORTCUT",
+      "com.sonyericsson.home.permission.BROADCAST_BADGE",
+      "com.sonymobile.home.permission.PROVIDER_INSERT_BADGE",
+      "com.anddoes.launcher.permission.UPDATE_COUNT",
+      "com.majeur.launcher.permission.UPDATE_BADGE",
+      "com.huawei.android.launcher.permission.CHANGE_BADGE",
+      "com.huawei.android.launcher.permission.READ_SETTINGS",
+      "com.huawei.android.launcher.permission.WRITE_SETTINGS",
+      "android.permission.READ_APP_BADGE",
+      "com.oppo.launcher.permission.READ_SETTINGS",
+      "com.oppo.launcher.permission.WRITE_SETTINGS",
+      "me.everything.badger.permission.BADGE_COUNT_READ",
+      "me.everything.badger.permission.BADGE_COUNT_WRITE"
+    ],
+    "blocked": [
+      "android.permission.RECORD_AUDIO",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.READ_EXTERNAL_STORAGE"
+    ],
+    "debugOnly": [
+      "android.permission.SYSTEM_ALERT_WINDOW"
+    ],
+    "reasons": {
+      "android.permission.INTERNET": "Calls the API and loads exercise media.",
+      "android.permission.VIBRATE": "Haptic feedback through expo-haptics.",
+      "android.permission.ACCESS_NETWORK_STATE": "Offline/connectivity detection via NetInfo; also merged by Sentry and expo-image.",
+      "android.permission.ACCESS_WIFI_STATE": "Wi-Fi connectivity information from @react-native-community/netinfo.",
+      "android.permission.CHANGE_WIFI_MULTICAST_STATE": "expo-dev-launcher debug manifest: local development server discovery.",
+      "android.permission.ACCESS_LOCAL_NETWORK": "React Native debug manifest: Metro dev-server access on Android 17 (SDK 37).",
+      "android.permission.CAMERA": "User-initiated progress photos through expo-image-picker.",
+      "android.permission.RECEIVE_BOOT_COMPLETED": "expo-notifications restores scheduled workout reminders after reboot.",
+      "android.permission.POST_NOTIFICATIONS": "Workout reminders and app notifications through expo-notifications.",
+      "android.permission.WAKE_LOCK": "Firebase Messaging, pulled in by expo-notifications, processes incoming push messages.",
+      "android.permission.USE_BIOMETRIC": "AndroidX Biometric dependency of expo-secure-store; library-declared secure-storage authentication capability.",
+      "android.permission.USE_FINGERPRINT": "AndroidX Biometric dependency of expo-secure-store; legacy fingerprint authentication capability.",
+      "com.google.android.c2dm.permission.RECEIVE": "Firebase Messaging dependency of expo-notifications receives push messages.",
+      "com.android.vending.BILLING": "Store subscriptions through RevenueCat react-native-purchases.",
+      "fit.get200days.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION": "AndroidX Core protects dynamically registered receivers from other apps.",
+      "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE": "Install Referrer dependency of RevenueCat attributes Play installs.",
+      "com.sec.android.provider.badge.permission.READ": "expo-notifications bundles ShortcutBadger 1.1.22; Samsung launcher notification badge support.",
+      "com.sec.android.provider.badge.permission.WRITE": "expo-notifications bundles ShortcutBadger 1.1.22; Samsung launcher notification badge support.",
+      "com.htc.launcher.permission.READ_SETTINGS": "expo-notifications bundles ShortcutBadger 1.1.22; HTC launcher notification badge support.",
+      "com.htc.launcher.permission.UPDATE_SHORTCUT": "expo-notifications bundles ShortcutBadger 1.1.22; HTC launcher notification badge support.",
+      "com.sonyericsson.home.permission.BROADCAST_BADGE": "expo-notifications bundles ShortcutBadger 1.1.22; Sony launcher notification badge support.",
+      "com.sonymobile.home.permission.PROVIDER_INSERT_BADGE": "expo-notifications bundles ShortcutBadger 1.1.22; Sony launcher notification badge support.",
+      "com.anddoes.launcher.permission.UPDATE_COUNT": "expo-notifications bundles ShortcutBadger 1.1.22; Apex launcher notification badge support.",
+      "com.majeur.launcher.permission.UPDATE_BADGE": "expo-notifications bundles ShortcutBadger 1.1.22; library-declared launcher badge updates (not requested directly by app code).",
+      "com.huawei.android.launcher.permission.CHANGE_BADGE": "expo-notifications bundles ShortcutBadger 1.1.22; Huawei launcher notification badge support.",
+      "com.huawei.android.launcher.permission.READ_SETTINGS": "expo-notifications bundles ShortcutBadger 1.1.22; Huawei launcher notification badge support.",
+      "com.huawei.android.launcher.permission.WRITE_SETTINGS": "expo-notifications bundles ShortcutBadger 1.1.22; Huawei launcher notification badge support.",
+      "android.permission.READ_APP_BADGE": "expo-notifications bundles ShortcutBadger 1.1.22; Android launcher badge access notification badge support.",
+      "com.oppo.launcher.permission.READ_SETTINGS": "expo-notifications bundles ShortcutBadger 1.1.22; OPPO launcher notification badge support.",
+      "com.oppo.launcher.permission.WRITE_SETTINGS": "expo-notifications bundles ShortcutBadger 1.1.22; OPPO launcher notification badge support.",
+      "me.everything.badger.permission.BADGE_COUNT_READ": "expo-notifications bundles ShortcutBadger 1.1.22; EverythingMe launcher notification badge support.",
+      "me.everything.badger.permission.BADGE_COUNT_WRITE": "expo-notifications bundles ShortcutBadger 1.1.22; EverythingMe launcher notification badge support."
+    }
+  },
+  "ios": {
+    "usageDescriptions": [
+      "NSCameraUsageDescription",
+      "NSPhotoLibraryUsageDescription"
+    ],
+    "forbidden": [
+      "NSMicrophoneUsageDescription"
+    ]
+  }
+}

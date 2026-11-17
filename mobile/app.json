@@ -52,7 +52,13 @@
         "backgroundColor": "#0F172A",
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon-monochrome.png"
-      }
+      },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -83,6 +89,14 @@
             "image": "./assets/splash-icon.png",
             "backgroundColor": "#0F172A"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "200 Days uses your photos only when you choose a progress photo to add to your check-in.",
+          "cameraPermission": "200 Days uses your camera only when you take a progress photo for your check-in.",
+          "microphonePermission": false
         }
       ]
     ],
