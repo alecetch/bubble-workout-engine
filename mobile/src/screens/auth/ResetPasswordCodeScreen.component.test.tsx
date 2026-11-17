@@ -135,14 +135,37 @@ describe("ResetPasswordCodeScreen", () => {
     expect(await screen.findByRole("button", { name: "Resetting..." })).toBeDisabled();
   });
 
-  it("ApiError(400) shows invalid-or-expired code error message", async () => {
+  it("ApiError(400) offers retrying the code or requesting a new one", async () => {
     apiFetchMock.mockRejectedValueOnce(new ApiError(400, "bad code"));
     renderCode();
 
     fillValidResetForm();
     fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
 
-    expect(await screen.findByText("Invalid or expired code. Please request a new one.")).toBeInTheDocument();
+    expect(await screen.findByText("That code isn't right. Check it and try again, or request a new code.")).toBeInTheDocument();
+    expect(screen.queryByText(/Please request a new one/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the code after a 400 and allows correcting and resubmitting it", async () => {
+    apiFetchMock.mockRejectedValueOnce(new ApiError(400, "bad code"));
+    const navigation = renderCode();
+    fillValidResetForm();
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByText("That code isn't right. Check it and try again, or request a new code.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("000000")).toHaveValue("123456");
+    expect(screen.getByRole("button", { name: "Reset password" })).toBeEnabled();
+    fireEvent.change(screen.getByPlaceholderText("000000"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    expect(apiFetchMock).toHaveBeenCalledTimes(2);
+    expect(apiFetchMock).toHaveBeenLastCalledWith("/api/auth/reset-password", {
+      method: "POST",
+      body: { email: "user@example.com", code: "654321", new_password: "newpassword123" },
+    });
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
   it("ApiError(429) explains the wait instead of showing a generic failure", async () => {

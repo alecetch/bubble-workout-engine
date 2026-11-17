@@ -60,7 +60,7 @@ export function ResetPasswordCodeScreen({ navigation, route }: Props): React.JSX
       if (error instanceof ApiError && error.status === 429) {
         setErrorMessage("Too many attempts. Wait a few minutes, then try again.");
       } else if (error instanceof ApiError && error.status === 400) {
-        setErrorMessage("Invalid or expired code. Please request a new one.");
+        setErrorMessage("That code isn't right. Check it and try again, or request a new code.");
       } else {
         setErrorMessage("Something went wrong. Please try again.");
       }
