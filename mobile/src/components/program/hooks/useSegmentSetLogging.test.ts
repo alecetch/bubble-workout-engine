@@ -55,7 +55,8 @@ describe("useSegmentSetLogging", () => {
       { weight: "50", reps: "8", rirActual: null },
     ]);
     expect(result.current.exerciseRirMap).toEqual({ "exercise-1": 2 });
-    expect(result.current.activeSetKey).toBe("exercise-1:0");
+    expect(result.current.doneSetKeys).toEqual(new Set(["exercise-1:0"]));
+    expect(result.current.activeSetKey).toBe("exercise-1:1");
   });
 
   it("hydrates round-based inputMap from existing log rows on open", async () => {
@@ -87,6 +88,50 @@ describe("useSegmentSetLogging", () => {
     ]);
     expect(result.current.exerciseRirMap).toEqual({ "exercise-1": 1 });
     expect(resetRoundState).toHaveBeenCalledTimes(1);
+    expect(resetRoundState).toHaveBeenCalledWith(new Set([0, 2]));
+    expect(result.current.doneSetKeys).toEqual(new Set(["exercise-1:0", "exercise-1:2"]));
+  });
+
+  it("restores two saved sets and highlights the third", () => {
+    const loggableExercises = [exercise({ sets: 3 })];
+    const { result } = renderHook(() => useSegmentSetLogging({
+      loggableExercises, existingLogsQuery: { data: [row(), row({ orderIndex: 2 })], isLoading: false },
+      inlineLoggingOpen: true, isRoundBased: false, totalRounds: 1,
+    }));
+    expect(result.current.doneSetKeys).toEqual(new Set(["exercise-1:0", "exercise-1:1"]));
+    expect(result.current.activeSetKey).toBe("exercise-1:2");
+  });
+
+  it("starts at the first set when there are no saved rows", () => {
+    const loggableExercises = [exercise({ sets: 3 })];
+    const { result } = renderHook(() => useSegmentSetLogging({
+      loggableExercises, existingLogsQuery: { data: [], isLoading: false },
+      inlineLoggingOpen: true, isRoundBased: false, totalRounds: 1,
+    }));
+    expect(result.current.doneSetKeys.size).toBe(0);
+    expect(result.current.activeSetKey).toBe("exercise-1:0");
+  });
+
+  it("only restores keys for rows represented in the built input map", () => {
+    const loggableExercises = [exercise({ sets: 2 })];
+    const { result } = renderHook(() => useSegmentSetLogging({
+      loggableExercises,
+      existingLogsQuery: { data: [row(), row({ orderIndex: 3 }), row({ orderIndex: 0 }), row({ programExerciseId: "other" })], isLoading: false },
+      inlineLoggingOpen: true, isRoundBased: false, totalRounds: 1,
+    }));
+    expect(result.current.doneSetKeys).toEqual(new Set(["exercise-1:0"]));
+  });
+
+  it("restores a round as complete only when every exercise has a saved row", () => {
+    const loggableExercises = [exercise(), exercise({ id: "exercise-2" })];
+    const onRoundStateReset = vi.fn();
+    const { result } = renderHook(() => useSegmentSetLogging({
+      loggableExercises,
+      existingLogsQuery: { data: [row(), row({ programExerciseId: "exercise-2" }), row({ orderIndex: 2 })], isLoading: false },
+      inlineLoggingOpen: true, isRoundBased: true, totalRounds: 3, onRoundStateReset,
+    }));
+    expect(result.current.doneSetKeys).toEqual(new Set(["exercise-1:0", "exercise-2:0", "exercise-1:1"]));
+    expect(onRoundStateReset).toHaveBeenCalledWith(new Set([0]));
   });
 
   it("does not re-hydrate while already initialized", async () => {

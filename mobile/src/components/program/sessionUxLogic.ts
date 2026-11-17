@@ -247,3 +247,20 @@ export function computeSessionStatsFromLoggedRows(
     exerciseCount: exerciseIds.size,
   };
 }
+
+export function findNextUncheckedSetKey(
+  exercises: Exercise[],
+  doneSetKeys: Set<string>,
+): string | null {
+  for (const exercise of exercises) {
+    const exerciseKey = exercise.id ?? exercise.exerciseId ?? exercise.name;
+    const setCount = getExerciseSetCount(exercise);
+    for (let setIndex = 0; setIndex < setCount; setIndex += 1) {
+      const setKey = `${exerciseKey}:${setIndex}`;
+      if (!doneSetKeys.has(setKey)) {
+        return setKey;
+      }
+    }
+  }
+  return null;
+}

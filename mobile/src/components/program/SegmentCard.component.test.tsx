@@ -2,6 +2,8 @@ import { onlineManager } from "@tanstack/react-query";
 import React from "react";
 import { act, configure, fireEvent, render, screen } from "@testing-library/react";
 import { ApiError, NetworkTimeoutError } from "../../api/client";
+import type { SegmentLogRow } from "../../api/segmentLog";
+import { colors } from "../../theme/colors";
 import { _resetForTest } from "../../utils/localWorkoutLog";
 import { SegmentCard } from "./SegmentCard";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
@@ -24,6 +26,12 @@ const { getSegmentPresentationMock } = vi.hoisted(() => ({
 }));
 
 const mutateAsyncMock = vi.fn().mockResolvedValue({ saved: 1, prs: [] });
+let existingLogRows: SegmentLogRow[] = [];
+const savedRows = (count: number, programExerciseId = "ex-1"): SegmentLogRow[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `saved-${programExerciseId}-${index}`, programExerciseId, orderIndex: index + 1,
+    weightKg: 60, repsCompleted: 8, rirActual: null,
+  }));
 
 // Several tests here chain multiple save-and-rerender steps (start, fill, mark
 // round complete, close, confirm effort). The default 1s findBy/waitFor budget
@@ -44,7 +52,7 @@ const adjustRestDurationMock = vi.fn();
 
 vi.mock("../../api/hooks", () => ({
   useSegmentExerciseLogs: () => ({
-    data: [],
+    data: existingLogRows,
     isLoading: false,
   }),
   useSaveSegmentLogs: () => ({
@@ -102,6 +110,7 @@ function segmentCardElement(
       onUnsavedSetsChange={props.onUnsavedSetsChange}
       retryRequest={props.retryRequest}
       onSetsLoggedChange={props.onSetsLoggedChange}
+      onPrsDetected={props.onPrsDetected}
     />
   );
 }
@@ -139,6 +148,8 @@ function runningRestEntry(segmentId: string) {
 
 describe("SegmentCard", () => {
   beforeEach(() => {
+    existingLogRows = [];
+    _resetForTest();
     // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
     // test that times out before consuming one leaks it into the next test.
     mutateAsyncMock.mockReset();
@@ -151,6 +162,61 @@ describe("SegmentCard", () => {
     getSegmentPresentationMock.mockClear();
     useSettingsStore.setState({ showRestTimer: true, hydrated: true });
     setMockTimerState();
+  });
+
+  it("restores saved ticks and summary without saves or just-finished effects", async () => {
+    existingLogRows = savedRows(2);
+    const count = vi.fn(), allSaved = vi.fn(), prs = vi.fn();
+    renderCard({ segment: makeSegment({}, [makeExercise({ sets: 3 })]), onSetsLoggedChange: count, onAllSetsSaved: allSaved, onPrsDetected: prs });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await waitForSlow(() => {
+      for (const index of [1, 2]) {
+        const checkbox = screen.getByRole("button", { name: `Barbell Squat set ${index} complete` });
+        expect(checkbox.querySelector('[data-icon="checkbox"]')).toHaveAttribute("data-color", colors.success);
+      }
+      expect(screen.getByRole("button", { name: "Barbell Squat set 3 complete" }).querySelector('[data-icon="checkbox-outline"]')).toBeInTheDocument();
+      expect(count).toHaveBeenLastCalledWith("seg-1", 2);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+    expect(startRestMock).not.toHaveBeenCalled();
+    expect(allSaved).not.toHaveBeenCalled();
+    expect(prs).not.toHaveBeenCalled();
+    expect(impactAsyncMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Close Log"));
+    await waitForSlow(() => expect(screen.getByText(/2\/3 sets/)).toBeInTheDocument());
+  });
+
+  it("does not announce completion when every prescribed set is restored", async () => {
+    existingLogRows = savedRows(3);
+    const allSaved = vi.fn();
+    renderCard({ segment: makeSegment({}, [makeExercise({ sets: 3 })]), onAllSetsSaved: allSaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await waitForSlow(() => expect(screen.getByRole("button", { name: "Barbell Squat set 3 complete" }).querySelector('[data-icon="checkbox"]')).toBeInTheDocument());
+    expect(allSaved).not.toHaveBeenCalled();
+    expect(startRestMock).not.toHaveBeenCalled();
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("saves a new third set after restore, ticks it and starts rest", async () => {
+    existingLogRows = savedRows(2);
+    const allSaved = vi.fn();
+    renderCard({ segment: makeSegment({}, [makeExercise({ sets: 3, restSeconds: 90 })]), onAllSetsSaved: allSaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await waitForSlow(() => expect(screen.getByRole("button", { name: "Barbell Squat set 2 complete" }).querySelector('[data-icon="checkbox"]')).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Close Log"));
+    await waitForSlow(() => expect(screen.getByText(/2\/3 sets/)).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Resume"));
+    await waitForSlow(() => expect(screen.getByRole("button", { name: "Barbell Squat set 2 complete" }).querySelector('[data-icon="checkbox"]')).toBeInTheDocument());
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 3 complete" }));
+    await waitForSlow(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
+      expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ rows: [expect.objectContaining({ orderIndex: 3 })] }));
+      expect(screen.getByRole("button", { name: "Barbell Squat set 3 complete" }).querySelector('[data-icon="checkbox"]')).toBeInTheDocument();
+      expect(allSaved).toHaveBeenCalledWith("seg-1");
+      expect(startRestMock).toHaveBeenCalledWith("seg-1");
+    });
   });
 
   for (const error of [new NetworkTimeoutError(), new ApiError(503, "unavailable"), new ApiError(400, "invalid")]) {
@@ -848,6 +914,37 @@ describe("SegmentCard — round-based logging (superset)", () => {
     return makeSegment({ segmentType: "superset", segmentTypeLabel: "Superset", rounds: 4 }, supersetExercises());
   }
 
+  it("restores full rounds and opens the first incomplete round without completion effects", async () => {
+    existingLogRows = [...savedRows(1), { ...savedRows(1)[0], programExerciseId: "ex-2" }, { ...savedRows(1)[0], orderIndex: 2 }];
+    const allSaved = vi.fn(), count = vi.fn();
+    renderCard({ segment: supersetSegment(), onAllSetsSaved: allSaved, onSetsLoggedChange: count });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await waitForSlow(() => {
+      expect(screen.getByText(/Round 1 ✓/)).toBeInTheDocument();
+      expect(screen.getByText("Round 2")).toBeInTheDocument();
+      expect(count).toHaveBeenLastCalledWith("seg-1", 3);
+    });
+    expect(allSaved).not.toHaveBeenCalled();
+    expect(startRestMock).not.toHaveBeenCalled();
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("skips already-restored later rounds when finishing an incomplete round", async () => {
+    existingLogRows = [0, 2].flatMap(index => ["ex-1", "ex-2"].map(programExerciseId => ({
+      ...savedRows(1)[0], programExerciseId, orderIndex: index + 1,
+    })));
+    const allSaved = vi.fn();
+    renderCard({ segment: supersetSegment(), onAllSetsSaved: allSaved });
+    fireEvent.click(screen.getByText("Start Exercise"));
+    await waitForSlow(() => expect(screen.getByText("Round 2")).toBeInTheDocument());
+    await completeRound();
+    await waitForSlow(() => expect(screen.getByText("Round 4")).toBeInTheDocument());
+    expect(allSaved).not.toHaveBeenCalled();
+    await completeRound();
+    await waitForSlow(() => expect(allSaved).toHaveBeenCalledTimes(1));
+    expect(mutateAsyncMock).toHaveBeenCalledTimes(2);
+  });
+
   async function openSupersetPanel() {
     renderCard({ segment: supersetSegment() });
     fireEvent.click(screen.getByText("Start Exercise"));
@@ -874,6 +971,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
   }
 
   beforeEach(() => {
+    existingLogRows = [];
     // mockReset, not mockClear: mockClear keeps queued mock*Once results, so a
     // test that times out before consuming one leaks it into the next test.
     mutateAsyncMock.mockReset();
