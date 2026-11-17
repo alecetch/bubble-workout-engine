@@ -1,3 +1,4 @@
+import { normalizeGoals, normalizeDays, normalizeFitnessLevel, normalizeSex, normalizeAgeRange } from "../../state/onboarding/profileNormalizers";
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -60,69 +61,8 @@ type EquipmentCatalogItem = {
   category: string | null;
 };
 
-function toSlug(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
 function toggleValue<T extends string>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}
-
-function mapGoals(values: unknown): GoalType[] {
-  const aliases = new Map<string, GoalType>([
-    ["strength", "Strength"],
-    ["hypertrophy", "Hypertrophy"],
-    ["conditioning", "Conditioning"],
-    ["hyrox", "HYROX Workout"],
-    ["hyrox_workout", "HYROX Workout"],
-    ["hyrox_competition", "HYROX Workout"],
-  ]);
-  const raw = Array.isArray(values) ? values : [];
-  return Array.from(new Set(raw.map((value) => aliases.get(toSlug(value))).filter((value): value is GoalType => Boolean(value))));
-}
-
-function mapFitness(value: unknown): FitnessLevel | null {
-  const slug = toSlug(value);
-  return FITNESS_LEVELS.find((item) => toSlug(item) === slug) ?? null;
-}
-
-function mapDays(values: unknown): DayOfWeek[] {
-  const aliases = new Map<string, DayOfWeek>([
-    ["mon", "Mon"],
-    ["monday", "Mon"],
-    ["tue", "Tues"],
-    ["tues", "Tues"],
-    ["tuesday", "Tues"],
-    ["wed", "Wed"],
-    ["wednesday", "Wed"],
-    ["thu", "Thurs"],
-    ["thur", "Thurs"],
-    ["thurs", "Thurs"],
-    ["thursday", "Thurs"],
-    ["fri", "Fri"],
-    ["friday", "Fri"],
-    ["sat", "Sat"],
-    ["saturday", "Sat"],
-    ["sun", "Sun"],
-    ["sunday", "Sun"],
-  ]);
-  const raw = Array.isArray(values) ? values : [];
-  return Array.from(new Set(raw.map((value) => aliases.get(toSlug(value))).filter((value): value is DayOfWeek => Boolean(value))));
-}
-
-function mapSex(value: unknown): Sex | null {
-  const slug = toSlug(value);
-  return SEX_OPTIONS.find((item) => toSlug(item) === slug) ?? null;
-}
-
-function mapAge(value: unknown): AgeRange | null {
-  const slug = toSlug(value);
-  return AGE_RANGES.find((item) => toSlug(item) === slug) ?? null;
 }
 
 function mapMinutes(value: unknown): MinutesPerSession | null {
@@ -249,15 +189,15 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
     const profile = profileQuery.data;
     if (!profile || seededProfileId === profile.id) return;
     setDraftState({
-      goals: mapGoals(profile.goals),
-      fitnessLevel: mapFitness(profile.fitnessLevel),
-      preferredDays: mapDays(profile.preferredDays),
+      goals: normalizeGoals(profile.goals),
+      fitnessLevel: normalizeFitnessLevel(profile.fitnessLevel),
+      preferredDays: normalizeDays(profile.preferredDays),
       scheduleConstraints: String(profile.scheduleConstraints ?? ""),
       minutesPerSession: mapMinutes(profile.minutesPerSession),
       heightCm: numberOrNull(profile.heightCm),
       weightKg: numberOrNull(profile.weightKg),
-      sex: mapSex(profile.sex),
-      ageRange: mapAge(profile.ageRange),
+      sex: normalizeSex(profile.sex),
+      ageRange: normalizeAgeRange(profile.ageRange),
       preferredUnit: String(profile.preferredUnit ?? "kg") === "lbs" ? "lbs" : "kg",
       equipmentPresetCode: String(profile.equipmentPreset ?? profile.equipmentPresetCode ?? "") || null,
       selectedEquipmentCodes: Array.isArray(profile.equipmentItemCodes)
@@ -365,15 +305,15 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
 
       if (includes("goals") && programAction === "regenerate") {
         resetFromProfile({
-          goals: draft.goals ?? mapGoals(updatedProfile.goals),
-          fitnessLevel: draft.fitnessLevel ?? mapFitness(updatedProfile.fitnessLevel),
-          preferred_days: draft.preferredDays ?? mapDays(updatedProfile.preferredDays),
+          goals: draft.goals ?? normalizeGoals(updatedProfile.goals),
+          fitnessLevel: draft.fitnessLevel ?? normalizeFitnessLevel(updatedProfile.fitnessLevel),
+          preferred_days: draft.preferredDays ?? normalizeDays(updatedProfile.preferredDays),
           scheduleConstraints: draft.scheduleConstraints ?? updatedProfile.scheduleConstraints,
           minutes_per_session: draft.minutesPerSession ?? mapMinutes(updatedProfile.minutesPerSession),
           heightCm: draft.heightCm ?? numberOrNull(updatedProfile.heightCm),
           weightKg: draft.weightKg ?? numberOrNull(updatedProfile.weightKg),
-          sex: draft.sex ?? mapSex(updatedProfile.sex),
-          ageRange: draft.ageRange ?? mapAge(updatedProfile.ageRange),
+          sex: draft.sex ?? normalizeSex(updatedProfile.sex),
+          ageRange: draft.ageRange ?? normalizeAgeRange(updatedProfile.ageRange),
           equipment_preset_slug: draft.equipmentPresetCode ?? updatedProfile.equipmentPreset ?? null,
           equipment_items_slugs: draft.selectedEquipmentCodes ?? updatedProfile.equipmentItemCodes ?? [],
           injuryFlags: updatedProfile.injuryFlags ?? [],

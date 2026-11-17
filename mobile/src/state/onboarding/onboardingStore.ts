@@ -1,27 +1,18 @@
+import { normalizeGoals, normalizeDays, normalizeFitnessLevel, normalizeSex, normalizeAgeRange } from "./profileNormalizers";
 import { create } from "zustand";
 import {
-  AGE_RANGES,
-  DAYS_OF_WEEK,
   DEFAULT_ONBOARDING_DRAFT,
-  FITNESS_LEVELS,
-  GOAL_TYPES,
   normalizeInjuryFlag,
   MINUTES_PER_SESSION,
   NO_KNOWN_ISSUES,
-  SEX_OPTIONS,
-  type AgeRange,
-  type DayOfWeek,
   type EquipmentPreset,
   type FieldErrors,
-  type FitnessLevel,
-  type GoalType,
   type InjuryFlag,
   type MinutesPerSession,
   type OnboardingDraft,
   type OnboardingStep,
   type ProfileLike,
   type StepAttemptedState,
-  type Sex,
 } from "./types.js";
 
 type OnboardingState = {
@@ -49,22 +40,6 @@ function toStringArray(value: unknown): string[] {
   return value.map((item) => String(item)).filter(Boolean);
 }
 
-function matchesLiteral<T extends readonly string[]>(value: unknown, allowed: T): T[number] | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  return (allowed as readonly string[]).includes(raw) ? (raw as T[number]) : null;
-}
-
-function toGoalTypes(value: unknown): GoalType[] {
-  return toStringArray(value).filter((item): item is GoalType =>
-    (GOAL_TYPES as readonly string[]).includes(item),
-  );
-}
-
-function toFitnessLevel(value: unknown): FitnessLevel | null {
-  return matchesLiteral(value, FITNESS_LEVELS);
-}
-
 function toInjuryFlags(value: unknown): InjuryFlag[] {
   return toStringArray(value).map(normalizeInjuryFlag).filter((item): item is InjuryFlag => item !== null);
 }
@@ -72,12 +47,6 @@ function toInjuryFlags(value: unknown): InjuryFlag[] {
 function toEquipmentPreset(value: unknown): EquipmentPreset | null {
   const raw = String(value ?? "").trim();
   return raw ? raw : null;
-}
-
-function toDays(value: unknown): DayOfWeek[] {
-  return toStringArray(value).filter((item): item is DayOfWeek =>
-    (DAYS_OF_WEEK as readonly string[]).includes(item),
-  );
 }
 
 function toMinutes(value: unknown): MinutesPerSession | null {
@@ -92,14 +61,6 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function toSex(value: unknown): Sex | null {
-  return matchesLiteral(value, SEX_OPTIONS);
-}
-
-function toAgeRange(value: unknown): AgeRange | null {
-  return matchesLiteral(value, AGE_RANGES);
-}
-
 function applyExclusivity(flags: InjuryFlag[]): InjuryFlag[] {
   const unique = Array.from(new Set(flags));
   if (unique.length === 1 && unique.includes(NO_KNOWN_ISSUES)) {
@@ -109,8 +70,8 @@ function applyExclusivity(flags: InjuryFlag[]): InjuryFlag[] {
 }
 
 export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
-  const goals = toGoalTypes(profileLike.goals ?? profileLike.main_goals ?? profileLike.mainGoals ?? []);
-  const fitnessLevel = toFitnessLevel(
+  const goals = normalizeGoals(profileLike.goals ?? profileLike.main_goals ?? profileLike.mainGoals ?? profileLike.main_goals_slugs ?? []);
+  const fitnessLevel = normalizeFitnessLevel(
     profileLike.fitnessLevel ?? profileLike.fitness_level ?? profileLike.fitness_level_slug,
   );
   const injuryFlags = applyExclusivity(
@@ -129,7 +90,7 @@ export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
       profileLike.equipment_items_slugs ??
       [],
   );
-  const preferredDays = toDays(profileLike.preferredDays ?? profileLike.preferred_days ?? []);
+  const preferredDays = normalizeDays(profileLike.preferredDays ?? profileLike.preferred_days ?? []);
 
   return {
     goals,
@@ -145,8 +106,8 @@ export function fromProfile(profileLike: ProfileLike): OnboardingDraft {
     heightCm: toNumberOrNull(profileLike.heightCm ?? profileLike.height_cm),
     weightKg: toNumberOrNull(profileLike.weightKg ?? profileLike.weight_kg),
     minutesPerSession: toMinutes(profileLike.minutesPerSession ?? profileLike.minutes_per_session),
-    sex: toSex(profileLike.sex),
-    ageRange: toAgeRange(profileLike.ageRange ?? profileLike.age_range),
+    sex: normalizeSex(profileLike.sex),
+    ageRange: normalizeAgeRange(profileLike.ageRange ?? profileLike.age_range),
     anchorLifts: [],
     anchorLiftsSkipped: Boolean(profileLike.anchorLiftsSkipped ?? profileLike.anchor_lifts_skipped ?? false),
     preferredUnit: String(profileLike.preferredUnit ?? profileLike.preferred_unit ?? "kg") === "lbs"
