@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { apiFetch } from "../../api/client";
+import { ApiError, apiFetch } from "../../api/client";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { AuthStackParamList } from "../../navigation/AuthNavigator";
 import { colors } from "../../theme/colors";
@@ -32,9 +32,13 @@ export function ResetPasswordScreen({ navigation }: Props): React.JSX.Element {
         body: { email: normalizedEmail },
       });
       navigation.navigate("ResetPasswordCode", { email: normalizedEmail });
-    } catch {
-      // Navigate anyway — we never reveal whether the email exists.
-      navigation.navigate("ResetPasswordCode", { email: normalizedEmail });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) {
+        setErrorMessage("Too many attempts. Wait a few minutes, then try again.");
+      } else {
+        // Navigate anyway — we never reveal whether the email exists.
+        navigation.navigate("ResetPasswordCode", { email: normalizedEmail });
+      }
     } finally {
       setIsSubmitting(false);
     }
