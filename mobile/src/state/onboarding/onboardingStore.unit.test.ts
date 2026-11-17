@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useOnboardingStore } from "./onboardingStore";
+import { fromProfile, useOnboardingStore } from "./onboardingStore";
 import { DEFAULT_ONBOARDING_DRAFT } from "./types";
 
 function resetStore(): void {
@@ -48,6 +48,25 @@ describe("useOnboardingStore", () => {
   it("resetFromProfile maps goals", () => {
     useOnboardingStore.getState().resetFromProfile(profile());
     expect(useOnboardingStore.getState().draft.goals).toContain("Strength");
+  });
+
+  it("fromProfile keeps saved slug goals and preferred days", () => {
+    const draft = fromProfile({ goals: ["conditioning"], preferredDays: ["mon", "tue", "fri", "sat"] } as any);
+    expect(draft.goals).toEqual(["Conditioning"]);
+    expect(draft.preferredDays).toEqual(["Mon", "Tues", "Fri", "Sat"]);
+  });
+
+  it("resetFromProfile normalizes raw profile fields without losing other saved values", () => {
+    useOnboardingStore.getState().resetFromProfile({
+      main_goals_slugs: ["hyrox_competition"], preferred_days: ["monday", "thursday"],
+      fitness_level_slug: "advanced", sex: "female", age_range: "under_18",
+      minutes_per_session: "50", height_cm: 170, weight_kg: 65, equipment_preset_slug: "full_gym",
+    } as any);
+    expect(useOnboardingStore.getState().draft).toMatchObject({
+      goals: ["HYROX Workout"], preferredDays: ["Mon", "Thurs"], fitnessLevel: "Advanced",
+      sex: "Female", ageRange: "Under 18", minutesPerSession: 50,
+      heightCm: 170, weightKg: 65, equipmentPresetCode: "full_gym",
+    });
   });
 
   it("resetFromProfile maps fitnessLevel", () => {

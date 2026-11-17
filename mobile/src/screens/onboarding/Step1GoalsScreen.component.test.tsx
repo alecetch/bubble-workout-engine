@@ -103,6 +103,15 @@ function renderScreen(params: Record<string, unknown> = {}) {
 }
 
 describe("Step1GoalsScreen", () => {
+  it("selects the saved goal when editing a profile containing slugs", async () => {
+    const actual = await vi.importActual<typeof import("../../state/onboarding/onboardingStore")>("../../state/onboarding/onboardingStore");
+    actual.useOnboardingStore.getState().resetFromProfile({ goals: ["conditioning"], fitnessLevel: "intermediate" } as any);
+    mockStore(actual.useOnboardingStore.getState().draft);
+    renderScreen();
+    expect(screen.getByRole("button", { name: "Conditioning" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Strength" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   beforeEach(() => {
     updateProfileMutateAsyncMock.mockReset();
     setDraftMock.mockReset();
