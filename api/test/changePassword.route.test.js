@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import bcrypt from "bcryptjs";
+import { pool } from "../src/db.js";
+test.after(() => pool.end());
+const deps = { throttle: { checkPasswordAttempts: async () => ({ allowed: true }), notePasswordFailure: async () => {} }, schedule() {} };
 import { authRouter, createChangePasswordHandler } from "../src/routes/auth.js";
 
 function mockRes() {
@@ -23,6 +26,7 @@ test("POST /api/auth/change-password succeeds with correct current password", as
   const handler = createChangePasswordHandler({
     query: async (sql, params) => {
       calls.push({ sql, params });
+      if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql) || sql.includes("DELETE FROM password_reset_token")) return { rows: [] };
       if (sql.includes("SELECT password_hash")) {
         return { rows: [{ password_hash: currentHash }] };
       }
@@ -46,9 +50,9 @@ test("POST /api/auth/change-password succeeds with correct current password", as
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, { ok: true });
-  assert.match(calls[1].sql, /UPDATE app_user SET password_hash/);
-  assert.equal(calls[1].params[1], "user-1");
-  assert.notEqual(calls[1].params[0], currentHash);
+  assert.match(calls.find(call => call.sql.includes("UPDATE app_user")).sql, /UPDATE app_user SET password_hash/);
+  assert.equal(calls.find(call => call.sql.includes("UPDATE app_user")).params[1], "user-1");
+  assert.notEqual(calls.find(call => call.sql.includes("UPDATE app_user")).params[0], currentHash);
 });
 
 test("POST /api/auth/change-password returns 401 with wrong current password", async () => {

@@ -9,7 +9,8 @@
  *   resend   — uses the Resend API (production on Fly)
  */
 
-import { createHash } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getBrand } from '../config/brand.js';
 import { createTransport } from "nodemailer";
 
 const PROVIDER = (process.env.EMAIL_PROVIDER || "console").trim().toLowerCase();
@@ -65,9 +66,10 @@ function sendViaConsole({ to, subject, text }) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export async function sendEmail({ to, subject, text, html }) {
+export async function sendEmail({ to, subject, text, html, sensitive = false }) {
   if (PROVIDER === "resend") return sendViaResend({ to, subject, text, html });
   if (PROVIDER === "smtp") return sendViaSmtp({ to, subject, text, html });
+  if (sensitive) { console.log('[emailService] Sensitive auth email suppressed in console mode.'); return; }
   return sendViaConsole({ to, subject, text, html });
 }
 
@@ -102,11 +104,30 @@ export async function sendPasswordResetEmail({ to, code }) {
     </div>
   `.trim();
 
-  return sendEmail({ to, subject, text, html });
+  return sendEmail({ to, subject, text, html, sensitive: true });
 }
 
 // ── Hash helper (shared with auth routes) ───────────────────────────────────
 
-export function hashCode(code) {
-  return createHash("sha256").update(String(code)).digest("hex");
+export function resetHmacSecret(env = process.env) {
+  if (typeof env.PASSWORD_RESET_HMAC_SECRET === 'string' && env.PASSWORD_RESET_HMAC_SECRET.length >= 32) return env.PASSWORD_RESET_HMAC_SECRET;
+  return createHmac('sha256', env.JWT_SECRET).update('password-reset-v1').digest();
+}
+
+export function hashResetCode(code, secret = resetHmacSecret()) {
+  return createHmac('sha256', secret).update(String(code)).digest('hex');
+}
+
+export function resetCodeMatches(code, storedHex, secret = resetHmacSecret()) {
+  if (typeof storedHex !== 'string' || !/^[0-9a-f]{64}$/i.test(storedHex)) return false;
+  const stored = Buffer.from(storedHex, 'hex');
+  const candidate = Buffer.from(hashResetCode(code, secret), 'hex');
+  return stored.length === candidate.length && timingSafeEqual(stored, candidate);
+}
+
+export async function sendPasswordChangedEmail({ to, changedAt }) {
+  const brand = getBrand();
+  const support = process.env.SUPPORT_EMAIL ?? brand.supportEmail;
+  const text = `Your password was changed on ${new Date(changedAt).toUTCString()}. If this wasn't you, reset your password straight away and contact ${support}.`;
+  return sendEmail({ to, subject: `Your ${brand.name} password was changed`, text, sensitive: true });
 }
