@@ -138,14 +138,21 @@ authRouter.post("/refresh", async (req, res) => {
   }
 });
 
-const resetLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  store: new PgRateLimitStore({ prefix: "auth:reset:ip:", failMode: "open" }),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { ok: false, code: "rate_limited", error: "Too many attempts. Try again later." },
-});
+export function createPasswordResetLimiters({ storeFactory = options => new PgRateLimitStore(options) } = {}) {
+  const create = (max, prefix) => rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max,
+    store: storeFactory({ prefix, failMode: 'open' }),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, code: 'rate_limited', error: 'Too many attempts. Try again later.' },
+  });
+  return {
+    forgotLimiter: create(10, 'auth:forgot:ip:'),
+    resetCodeLimiter: create(20, 'auth:reset-code:ip:'),
+  };
+}
+const { forgotLimiter, resetCodeLimiter } = createPasswordResetLimiters();
 
 export function createForgotPasswordHandler({ db = pool, schedule = fn => setImmediate(fn), throttle = makeAuthThrottle({ db }), sendReset = sendPasswordResetEmail } = {}) {
   return async function forgotPassword(req, res) {
@@ -200,8 +207,8 @@ export function createResetPasswordHandler({ db = pool, schedule = fn => setImme
   };
 }
 
-authRouter.post('/forgot-password', resetLimiter, createForgotPasswordHandler());
-authRouter.post('/reset-password', resetLimiter, createResetPasswordHandler());
+authRouter.post('/forgot-password', forgotLimiter, createForgotPasswordHandler());
+authRouter.post('/reset-password', resetCodeLimiter, createResetPasswordHandler());
 
 authRouter.post("/change-password", credentialLimiter, requireAuth, createChangePasswordHandler());
 

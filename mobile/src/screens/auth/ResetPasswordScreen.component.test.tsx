@@ -2,11 +2,15 @@ import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch } from "../../api/client";
+import { ApiError, apiFetch } from "../../api/client";
 import { ResetPasswordScreen } from "./ResetPasswordScreen";
 
 vi.mock("../../api/client", () => ({
   apiFetch: vi.fn(),
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(status: number, message: string) { super(message); this.name = "ApiError"; this.status = status; }
+  },
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
@@ -108,6 +112,15 @@ describe("ResetPasswordScreen", () => {
     expect(screen.queryByText("Network error")).not.toBeInTheDocument();
     expect(screen.queryByText(/Something went wrong/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Enter your email address.")).not.toBeInTheDocument();
+  });
+
+  it("ApiError(429) stays on the email screen and explains when to retry", async () => {
+    apiFetchMock.mockRejectedValueOnce(new ApiError(429, "rate limited"));
+    const navigation = renderScreen();
+    fireEvent.change(screen.getByPlaceholderText("you@example.com"), { target: { value: "user@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send reset code" }));
+    expect(await screen.findByText("Too many attempts. Wait a few minutes, then try again.")).toBeInTheDocument();
+    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
   it("Back button calls navigation.goBack", () => {

@@ -145,6 +145,15 @@ describe("ResetPasswordCodeScreen", () => {
     expect(await screen.findByText("Invalid or expired code. Please request a new one.")).toBeInTheDocument();
   });
 
+  it("ApiError(429) explains the wait instead of showing a generic failure", async () => {
+    apiFetchMock.mockRejectedValueOnce(new ApiError(429, "rate limited"));
+    renderCode();
+    fillValidResetForm();
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
+    expect(await screen.findByText("Too many attempts. Wait a few minutes, then try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Something went wrong. Please try again.")).not.toBeInTheDocument();
+  });
+
   it("paste auto-sync sets confirmPassword to match a pasted password", () => {
     renderCode();
     const confirmPasswordInput = screen.getByPlaceholderText("Re-enter password") as HTMLInputElement;
