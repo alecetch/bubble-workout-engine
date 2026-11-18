@@ -35,12 +35,12 @@ export type OnboardingStackParamList = {
   Step1Goals: {
     returnToReview?: boolean;
   } | undefined;
-  Step2Equipment: undefined;
+  Step2Equipment: { returnToReview?: boolean } | undefined;
   Step2EquipmentDetail: undefined;
-  Step2bBaselineLoads: undefined;
+  Step2bBaselineLoads: { returnToReview?: boolean } | undefined;
   YearGoal: undefined;
-  Step3Schedule: undefined;
-  Step4BodyMetrics: undefined;
+  Step3Schedule: { returnToReview?: boolean } | undefined;
+  Step4BodyMetrics: { returnToReview?: boolean } | undefined;
   SplitReview: {
     fromRecalibrate?: boolean;
     programId?: string;

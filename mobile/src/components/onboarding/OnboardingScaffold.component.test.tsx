@@ -62,6 +62,13 @@ describe("OnboardingScaffold", () => {
     expect(screen.getByText("Step 2 of 4")).toBeInTheDocument();
   });
 
+  it("can hide progress while retaining the title and Save action", () => {
+    renderScaffold({ showProgress: false, nextLabel: "Save" });
+    expect(screen.queryByText("Step 2 of 4")).not.toBeInTheDocument();
+    expect(screen.getByText("Goals")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
   it("does not render the error banner when hidden", () => {
     renderScaffold({ errorBannerVisible: false });
     expect(screen.queryByText("Please fix the highlighted fields")).not.toBeInTheDocument();

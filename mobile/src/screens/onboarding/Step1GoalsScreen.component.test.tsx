@@ -103,6 +103,16 @@ function renderScreen(params: Record<string, unknown> = {}) {
 }
 
 describe("Step1GoalsScreen", () => {
+  it("saves edits to review and discards Back without saving", async () => {
+    mockStore(buildDraft({ goals: ["Strength"], fitnessLevel: "Intermediate", injuryFlags: ["no_known_issues"] }));
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(navigation.replace).toHaveBeenCalledExactlyOnceWith("ProgramReview");
+    expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+  });
+
   it("selects the saved goal when editing a profile containing slugs", async () => {
     const actual = await vi.importActual<typeof import("../../state/onboarding/onboardingStore")>("../../state/onboarding/onboardingStore");
     actual.useOnboardingStore.getState().resetFromProfile({ goals: ["conditioning"], fitnessLevel: "intermediate" } as any);

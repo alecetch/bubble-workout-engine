@@ -356,8 +356,14 @@ describe("ProgramReviewScreen", () => {
 
     fireEvent.click(editButtons[4]);
 
-    expect(navigation.navigate).toHaveBeenCalledWith("Step4BodyMetrics");
+    expect(navigation.navigate).toHaveBeenCalledWith("Step4BodyMetrics", { returnToReview: true });
     expect(navigation.navigate).not.toHaveBeenCalledWith("Step3Schedule");
+  });
+
+  it("opens Schedule in edit mode", () => {
+    const navigation = renderScreen();
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[3]);
+    expect(navigation.navigate).toHaveBeenCalledWith("Step3Schedule", { returnToReview: true });
   });
 
   it("sends inactive users to the paywall instead of generating", () => {

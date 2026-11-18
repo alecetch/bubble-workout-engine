@@ -120,7 +120,7 @@ export function ProgramReviewScreen({ navigation, route }: Props): React.JSX.Ele
     if (profileQuery.data && !route.params?.preserveDraft) {
       resetFromProfile(profileQuery.data);
     }
-    navigation.navigate(target);
+    navigation.navigate(target, { returnToReview: true });
   };
 
   const activePrograms = activeProgramsQuery.data?.programs ?? [];

@@ -1,3 +1,6 @@
+import { useProfileEditBaseline } from "./useProfileEditBaseline";
+import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
+import { useReviewEditBack } from "./useReviewEditBack";
 import React, { useMemo, useRef } from "react";
 import {
   Animated,
@@ -49,7 +52,7 @@ const SECTION_ERROR_KEYS: Record<SectionKey, string[]> = {
   sessionSettings: ["minutesPerSession", "sex", "ageRange"],
 };
 
-export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Element {
+export function Step3ScheduleMetricsScreen({ navigation, route }: Props): React.JSX.Element {
   const scrollRef = useRef<ScrollViewInstance | null>(null);
   const sectionOffsetsRef = useRef<Record<SectionKey, number>>({
     preferredDays: 0,
@@ -59,9 +62,12 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
   const preferredDaysPulse = useErrorPulse();
   const sessionSettingsPulse = useErrorPulse();
 
+  const returnToReview = route?.params?.returnToReview ?? false;
+  const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step2Equipment"));
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const updateClientProfile = useUpdateClientProfile(profileId || "");
+  const editBaseline = useProfileEditBaseline(profileId, returnToReview);
 
   const draft = useOnboardingStore((state) => state.draft);
   const attemptedStep3 = useOnboardingStore((state) => state.attempted.step3);
@@ -166,7 +172,7 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
   };
 
   const handleBack = (): void => {
-    navigation.replace("Step2Equipment");
+    editBack();
   };
 
   const handleFinish = async (): Promise<void> => {
@@ -199,9 +205,11 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
         sex: draft.sex,
         ageRange: draft.ageRange,
         scheduleConstraints: normalizeText(draft.scheduleConstraints),
-        onboardingStepCompleted: 3,
+        onboardingStepCompleted: Math.max(draft.onboardingStepCompleted, 3) as typeof draft.onboardingStepCompleted,
       });
-      navigation.navigate("Step4BodyMetrics");
+      followSavedRoute(navigation, nextRouteAfterSave("schedule", {
+        returnToReview, dayCountChanged: editBaseline != null && editBaseline.dayCount !== daysPerWeek, daysPerWeek,
+      }));
     } catch {
       await hapticHeavy();
       setFieldErrors({ preferredDays: "Unable to save this step. Please try again." });
@@ -223,7 +231,8 @@ export function Step3ScheduleMetricsScreen({ navigation }: Props): React.JSX.Ele
       onNext={() => {
         void handleFinish();
       }}
-      nextLabel="Next"
+      nextLabel={returnToReview ? "Save" : "Next"}
+      showProgress={!returnToReview}
       nextDisabled={finishDisabled}
       isSaving={isSaving}
       scrollViewRef={scrollRef}

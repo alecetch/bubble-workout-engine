@@ -1,3 +1,6 @@
+import { useProfileEditBaseline } from "./useProfileEditBaseline";
+import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
+import { useReviewEditBack } from "./useReviewEditBack";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ScrollViewInstance } from "react-native";
@@ -58,11 +61,14 @@ function formatEquipmentSummary(
 // 2) Select preset -> summary card shows item count and "Customise equipment" button.
 // 3) Tap "Customise equipment" -> navigates to Step2EquipmentDetail.
 // 4) Continue -> profile saves; navigate away/back -> selection persists.
-export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
+export function Step2EquipmentScreen({ navigation, route }: Props): React.JSX.Element {
+  const returnToReview = route?.params?.returnToReview ?? false;
+  const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step1Goals"));
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const updateClientProfile = useUpdateClientProfile(profileId || "");
+  const editBaseline = useProfileEditBaseline(profileId, returnToReview);
 
   const draft = useOnboardingStore((state) => state.draft);
   const attemptedStep2 = useOnboardingStore((state) => state.attempted.step2);
@@ -152,7 +158,7 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
   }, [equipmentItemsQuery.data, selectedPresetCode, setDraft]);
 
   const handleBack = (): void => {
-    navigation.replace("Step1Goals");
+    editBack();
   };
 
   const handleNext = async (): Promise<void> => {
@@ -179,16 +185,15 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
       await updateClientProfile.mutateAsync({
         equipmentPreset: draft.equipmentPresetCode,
         equipmentItemCodes: draft.selectedEquipmentCodes,
-        onboardingStepCompleted: draft.onboardingStepCompleted < 2 ? 2 : draft.onboardingStepCompleted,
+        onboardingStepCompleted: Math.max(draft.onboardingStepCompleted, 2) as typeof draft.onboardingStepCompleted,
       });
-      const fitnessLevel = String(draft.fitnessLevel ?? "").toLowerCase();
-      const isNonBeginner =
-        fitnessLevel === "intermediate" || fitnessLevel === "advanced" || fitnessLevel === "elite";
-      if (isNonBeginner) {
-        navigation.replace("Step2bBaselineLoads");
-      } else {
-        navigation.replace("YearGoal");
-      }
+      const equipmentChanged = editBaseline != null && (
+        editBaseline.preset !== draft.equipmentPresetCode ||
+        JSON.stringify([...new Set(editBaseline.items)].sort()) !== JSON.stringify([...new Set(draft.selectedEquipmentCodes)].sort())
+      );
+      followSavedRoute(navigation, nextRouteAfterSave("equipment", {
+        returnToReview, fitnessLevel: draft.fitnessLevel, equipmentChanged,
+      }));
     } catch {
       setPrefillError("Unable to save this step. Please try again.");
       await hapticHeavy();
@@ -210,7 +215,8 @@ export function Step2EquipmentScreen({ navigation }: Props): React.JSX.Element {
       onNext={() => {
         void handleNext();
       }}
-      nextLabel="Next"
+      nextLabel={returnToReview ? "Save" : "Next"}
+      showProgress={!returnToReview}
       nextDisabled={nextDisabled}
       isSaving={isSaving}
       scrollViewRef={scrollViewRef}

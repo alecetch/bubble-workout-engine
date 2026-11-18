@@ -1,3 +1,5 @@
+import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
+import { useReviewEditBack } from "./useReviewEditBack";
 import React, { useMemo, useRef } from "react";
 import {
   Animated,
@@ -49,6 +51,8 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
   const fitnessPulse = useErrorPulse();
   const injuryPulse = useErrorPulse();
 
+  const returnToReview = route?.params?.returnToReview ?? false;
+  const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.goBack());
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
   const profileId = meQuery.data?.clientProfileId ?? "";
@@ -164,7 +168,7 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
   };
 
   const handleBack = (): void => {
-    navigation.goBack();
+    editBack();
   };
 
   const handleNext = async (): Promise<void> => {
@@ -195,14 +199,9 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
         goals: draft.goals,
         fitnessLevel: draft.fitnessLevel,
         injuryFlags: draft.injuryFlags,
-        onboardingStepCompleted: draft.onboardingStepCompleted < 1 ? 1 : draft.onboardingStepCompleted,
+        onboardingStepCompleted: Math.max(draft.onboardingStepCompleted, 1) as typeof draft.onboardingStepCompleted,
       });
-      if (route.params?.returnToReview) {
-        navigation.replace("ProgramReview", { preserveDraft: true });
-        return;
-      }
-
-      navigation.replace("Step2Equipment");
+      followSavedRoute(navigation, nextRouteAfterSave("goals", { returnToReview }));
     } catch {
       setFieldErrors({ goals: "Unable to save your changes. Please try again." });
       await hapticHeavy();
@@ -224,7 +223,8 @@ export function Step1GoalsScreen({ navigation, route }: Props): React.JSX.Elemen
       onNext={() => {
         void handleNext();
       }}
-      nextLabel="Next"
+      nextLabel={returnToReview ? "Save" : "Next"}
+      showProgress={!returnToReview}
       nextDisabled={loadingProfile || isSaving}
       isSaving={isSaving}
       scrollViewRef={scrollRef}

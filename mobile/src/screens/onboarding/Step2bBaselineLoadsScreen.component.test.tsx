@@ -144,8 +144,8 @@ function makeNav() {
   return { navigate: vi.fn(), goBack: vi.fn(), replace: vi.fn() };
 }
 
-function renderScreen(nav = makeNav()) {
-  render(<Step2bBaselineLoadsScreen navigation={nav as any} route={{} as any} />);
+function renderScreen(nav = makeNav(), params = {}) {
+  render(<Step2bBaselineLoadsScreen navigation={nav as any} route={{ params } as any} />);
   return nav;
 }
 
@@ -154,6 +154,13 @@ function changeSquatWeight(value: string): void {
 }
 
 describe("Step2bBaselineLoadsScreen", () => {
+  it("returns edit-mode baseline saves directly to review", async () => {
+    const navigation = renderScreen(makeNav(), { returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+    expect(navigation.replace).not.toHaveBeenCalledWith("YearGoal");
+  });
+
   beforeEach(() => {
     mutateAsyncMock.mockReset().mockResolvedValue({});
     setAttemptedMock.mockReset();
