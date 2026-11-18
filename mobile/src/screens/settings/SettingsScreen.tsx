@@ -576,7 +576,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete account</Text>
             <Text style={styles.modalBody}>
-              This will permanently delete your account, all training history, and all program data.
+              This will permanently delete your account, all training history, all program data and any progress photos.
               This cannot be undone.
             </Text>
             {subscriptionStatus === "active" || subscriptionStatus === "cancelled" ? <>

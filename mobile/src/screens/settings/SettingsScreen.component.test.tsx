@@ -567,6 +567,7 @@ describe("delete account modal", () => {
 
     expect(screen.getByText("Delete account")).toBeInTheDocument();
     expect(screen.getByText(/permanently delete your account/)).toBeInTheDocument();
+    expect(screen.getByText(/permanently delete your account/)).toHaveTextContent("progress photos");
   });
 
   it("tapping Cancel in the modal closes it", () => {

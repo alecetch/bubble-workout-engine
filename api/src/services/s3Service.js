@@ -4,6 +4,8 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -105,6 +107,50 @@ export async function deleteObject(key, bucket = DEFAULT_BUCKET) {
   await getClientForBucket(bucket).send(
     new DeleteObjectCommand({ Bucket: bucket, Key: key }),
   );
+}
+
+function assertSafePrefix(prefix) {
+  if (typeof prefix !== "string" || !prefix.trim() || !prefix.endsWith("/") || prefix === "/") throw new Error("unsafe_prefix");
+}
+
+async function* prefixPages(prefix, bucket, delimiter) {
+  assertSafePrefix(prefix);
+  let token;
+  do {
+    const page = await getClientForBucket(bucket).send(new ListObjectsV2Command({
+      Bucket: bucket, Prefix: prefix, ...(token ? { ContinuationToken: token } : {}),
+      ...(delimiter ? { Delimiter: delimiter } : {}),
+    }));
+    yield page;
+    if (page.IsTruncated && (!page.NextContinuationToken || page.NextContinuationToken === token)) throw new Error("list_prefix_failed");
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
+}
+
+export async function deletePrefix(prefix, bucket = DEFAULT_BUCKET) {
+  let deleted = 0;
+  for await (const page of prefixPages(prefix, bucket)) {
+    const objects = (page.Contents ?? []).filter(item => typeof item.Key === "string").map(item => ({ Key: item.Key }));
+    for (let offset = 0; offset < objects.length; offset += 1000) {
+      const batch = objects.slice(offset, offset + 1000);
+      const result = await getClientForBucket(bucket).send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch, Quiet: true } }));
+      if (result.Errors?.length) throw new Error("delete_prefix_failed");
+      deleted += batch.length;
+    }
+  }
+  return { deleted };
+}
+
+export async function listPrefixes(prefix, bucket = DEFAULT_BUCKET) {
+  const prefixes = [];
+  for await (const page of prefixPages(prefix, bucket, "/")) prefixes.push(...(page.CommonPrefixes ?? []).map(item => item.Prefix).filter(Boolean));
+  return prefixes;
+}
+
+export async function countPrefix(prefix, bucket = DEFAULT_BUCKET) {
+  let count = 0;
+  for await (const page of prefixPages(prefix, bucket)) count += (page.Contents ?? []).length;
+  return count;
 }
 
 // For client-facing URLs (signed against the publicly reachable endpoint).

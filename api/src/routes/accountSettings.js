@@ -2,12 +2,13 @@ import express from "express";
 import { pool as defaultPool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { publicInternalError } from "../utils/publicError.js";
+import { makeAccountDeletionService, AccountDeletionError } from "../services/accountDeletionService.js";
 
 function resolveUserId(req) {
   return req.auth?.user_id ?? null;
 }
 
-export function createAccountSettingsHandlers(db = defaultPool) {
+export function createAccountSettingsHandlers(db = defaultPool, { accountDeletion = makeAccountDeletionService({ db }) } = {}) {
   return {
     async getAccount(req, res) {
       try {
@@ -63,9 +64,12 @@ export function createAccountSettingsHandlers(db = defaultPool) {
     async deleteAccount(req, res) {
       try {
         const userId = resolveUserId(req);
-        await db.query("DELETE FROM app_user WHERE id = $1", [userId]);
+        await accountDeletion.deleteAccount(userId, { source: "app" });
         return res.json({ ok: true });
       } catch (err) {
+        if (err instanceof AccountDeletionError && err.code === "storage_failed") {
+          return res.status(503).json({ ok: false, code: "deletion_failed", error: "We couldn't delete your account just now. Nothing was removed. Please try again." });
+        }
         return res.status(500).json({ ok: false, error: publicInternalError(err) });
       }
     },

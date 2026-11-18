@@ -8,6 +8,28 @@ function syncError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+export async function deleteSubscriber(appUserId, {
+  fetchImpl = fetch, apiKey = process.env.REVENUECAT_SECRET_API_KEY, timeoutMs = 5000,
+} = {}) {
+  if (!apiKey?.trim()) return { skipped: true };
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("timeout")); }, timeoutMs); }),
+      (async () => {
+        const response = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`, {
+          method: "DELETE", headers: { Authorization: `Bearer ${apiKey.trim()}` }, signal: controller.signal,
+        });
+        if (response.status !== 200 && response.status !== 404) throw new Error("upstream_failed");
+        return { deleted: true };
+      })(),
+    ]);
+  } catch {
+    throw syncError("revenuecat_delete_failed", "RevenueCat customer deletion failed.");
+  } finally { clearTimeout(timer); }
+}
+
 async function rewardRequest(appUserId, path, body, {
   fetchImpl = fetch, apiKey = process.env.REVENUECAT_SECRET_API_KEY, timeoutMs = SUBSCRIBER_TIMEOUT_MS,
 } = {}) {
