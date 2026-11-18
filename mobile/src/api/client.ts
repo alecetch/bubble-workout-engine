@@ -39,6 +39,7 @@ export function getApiDiagnostics(): ApiDiagnostics {
 type RequestMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 type RequestOptions = {
+  expectedUserId?: string;
   method?: RequestMethod;
   body?: unknown;
   headers?: Record<string, string>;
@@ -294,6 +295,12 @@ export async function authenticatedFetch<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const accessToken = await getAccessToken();
+  const checkUser = () => {
+    if (options.expectedUserId && useSessionStore.getState().userId !== options.expectedUserId) {
+      throw new ApiError(401, "Session changed");
+    }
+  };
+  checkUser();
   if (!accessToken) {
     throw new ApiError(401, "Session expired", { code: "session_expired" });
   }
@@ -314,7 +321,9 @@ export async function authenticatedFetch<T>(
       throw error;
     }
 
+    checkUser();
     const refresh = await refreshAccessToken();
+    checkUser();
     if (refresh.kind === "transient") throw refresh.error;
     if (refresh.kind === "invalid") {
       throw new ApiError(401, "Session expired", { code: "session_expired" });

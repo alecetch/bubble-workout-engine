@@ -1,3 +1,5 @@
+import { isOutboxAvailable } from "../../sync/setLogOutbox";
+import { useSetLogOutbox } from "../../sync/useSetLogOutboxSync";
 import { toLocalIsoDate } from "../../utils/localDate";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -93,27 +95,43 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   const [summaryVisible, setSummaryVisible] = useState(false);
   useEffect(() => { setCompletionLocalDate(undefined); }, [programDayId]);
   const [segmentUnsavedCounts, setSegmentUnsavedCounts] = useState<Record<string, number>>({});
+  const [segmentUnsavedKeys, setSegmentUnsavedKeys] = useState<Record<string, string[] | undefined>>({});
   const [retryRequest, setRetryRequest] = useState(0);
   const allowLeaveRef = useRef(false);
-  const unsavedCount = Object.values(segmentUnsavedCounts).reduce((total, count) => total + count, 0);
-  const handleUnsavedSetsChange = useCallback((segmentId: string, count: number) => {
+  const outbox = useSetLogOutbox(userId, programDayId);
+  const queuedCounts: Record<string, number> = {};
+  if (isOutboxAvailable()) outbox.entries.forEach(entry => { queuedCounts[entry.workoutSegmentId] = (queuedCounts[entry.workoutSegmentId] ?? 0) + 1; });
+  const segmentIds = new Set([...Object.keys(segmentUnsavedCounts), ...Object.keys(queuedCounts)]);
+  const queuedKeys = (id: string) => outbox.entries.filter(e => e.workoutSegmentId === id)
+    .map(e => `${e.row.programExerciseId}:${e.row.orderIndex - 1}`);
+  const unsavedCount = [...segmentIds].reduce((total, id) => total + (segmentUnsavedKeys[id]
+    ? new Set([...segmentUnsavedKeys[id]!, ...(isOutboxAvailable() ? queuedKeys(id) : [])]).size
+    : Math.max(segmentUnsavedCounts[id] ?? 0, queuedCounts[id] ?? 0)), 0);
+  const allPersisted = isOutboxAvailable() && outbox.loaded && [...segmentIds].every(id => segmentUnsavedKeys[id]
+    ? segmentUnsavedKeys[id]!.every(key => queuedKeys(id).includes(key))
+    : (segmentUnsavedCounts[id] ?? 0) <= (queuedCounts[id] ?? 0));
+  const handleUnsavedSetsChange = useCallback((segmentId: string, count: number, keys?: string[]) => {
     setSegmentUnsavedCounts(current => current[segmentId] === count ? current : { ...current, [segmentId]: count });
+    setSegmentUnsavedKeys(current => JSON.stringify(current[segmentId]) === JSON.stringify(keys) ? current : { ...current, [segmentId]: keys });
   }, []);
   useEffect(() => {
     allowLeaveRef.current = false;
+    setSegmentUnsavedKeys(current => Object.keys(current).length ? {} : current);
     setSegmentUnsavedCounts(current => Object.keys(current).length === 0 ? current : {});
   }, [programDayId]);
   useEffect(() => navigation.addListener("beforeRemove", event => {
     if (!unsavedCount || allowLeaveRef.current) return;
     event.preventDefault();
-    Alert.alert("Leave without saving?", `${unsavedCount} set(s) haven't saved yet.`, [
+    Alert.alert(allPersisted ? "Sets not synced yet" : "Leave without saving?", allPersisted
+      ? `${unsavedCount} set(s) are saved on this phone and will sync when you're back online.`
+      : `${unsavedCount} set(s) haven't saved yet.`, [
       { text: "Stay", style: "cancel" },
       { text: "Leave", style: "destructive", onPress: () => {
         allowLeaveRef.current = true;
         navigation.dispatch(event.data.action);
       } },
     ]);
-  }), [navigation, unsavedCount]);
+  }), [navigation, unsavedCount, allPersisted]);
   const [segmentDoneSetCounts, setSegmentDoneSetCounts] = useState<Record<string, number>>({});
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollViewInstance>(null);

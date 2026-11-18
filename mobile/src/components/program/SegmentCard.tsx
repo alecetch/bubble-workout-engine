@@ -1,3 +1,6 @@
+import { localTrainingFields } from "../../utils/localDate";
+import { isOutboxAvailable } from "../../sync/setLogOutbox";
+import { useSetLogOutbox } from "../../sync/useSetLogOutboxSync";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -63,7 +66,7 @@ type SegmentCardProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
   onInlinePanelOpen?: (pageY: number) => void;
   onInlinePanelClose?: (pageY: number) => void;
-  onUnsavedSetsChange?: (segmentId: string, count: number) => void;
+  onUnsavedSetsChange?: (segmentId: string, count: number, keys?: string[]) => void;
   retryRequest?: number;
   onSetsLoggedChange?: (segmentId: string, doneCount: number) => void;
 };
@@ -155,6 +158,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   const useCombinedSupersetEffort = isCombinedSupersetEffort(segment.segmentType, loggableExercises.length);
   const totalRounds = presentation.roundsValue;
   const showRestTimer = useSettingsStore((state) => state.showRestTimer);
+  const outbox = useSetLogOutbox(userId, programDayId, segment.id);
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
   const saveLogsMutation = useSaveSegmentLogs();
   const [inlineLoggingOpen, setInlineLoggingOpen] = useState(false);
@@ -194,6 +198,8 @@ export const SegmentCard = React.memo(function SegmentCard({
   } = useSegmentSetLogging({
     loggableExercises,
     existingLogsQuery,
+    outboxEntries: outbox.entries,
+    outboxLoaded: outbox.loaded,
     inlineLoggingOpen,
     isRoundBased,
     totalRounds,
@@ -208,6 +214,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     },
   });
   const saveStatus = useSetSaveStatus({
+    userId, programDayId, workoutSegmentId: segment.id,
     save: payload => saveLogsMutation.mutateAsync(payload),
     onSaved: keys => {
       doneKeysFromRestore.current = false;
@@ -216,8 +223,8 @@ export const SegmentCard = React.memo(function SegmentCard({
   });
   unsavedCountRef.current = saveStatus.unsavedCount;
   useEffect(() => {
-    onUnsavedSetsChange?.(segment.id, saveStatus.unsavedCount);
-  }, [onUnsavedSetsChange, segment.id, saveStatus.unsavedCount]);
+    onUnsavedSetsChange?.(segment.id, saveStatus.unsavedCount, Object.keys(saveStatus.statuses));
+  }, [onUnsavedSetsChange, segment.id, saveStatus.unsavedCount, Object.keys(saveStatus.statuses).sort().join("|")]);
   useEffect(() => () => { onUnsavedSetsChange?.(segment.id, 0); }, [onUnsavedSetsChange, segment.id]);
   const retryRequestRef = useRef(retryRequest);
   useEffect(() => {
@@ -228,6 +235,7 @@ export const SegmentCard = React.memo(function SegmentCard({
 
   async function retryFailedSets(): Promise<void> {
     if (!Object.values(saveStatus.statuses).includes("failed")) return;
+    if (userId && isOutboxAvailable()) { await saveStatus.retryFailed(); return; }
     if (isRoundBased) {
       if (showPostStopRir) await handlePostStopRirDone();
       else await handleRoundComplete(activeRoundIndex);
@@ -467,6 +475,7 @@ export const SegmentCard = React.memo(function SegmentCard({
 
     try {
       await saveStatus.saveRows({
+        ...capturedSetDate(),
         userId,
         programId,
         programDayId,
@@ -533,6 +542,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     if (Number.isFinite(lastCompletedRound) && lastCompletedRound >= 0) {
       try {
         await saveStatus.saveRows({
+        ...capturedSetDate(),
           userId,
           programId,
           programDayId,
@@ -593,6 +603,17 @@ export const SegmentCard = React.memo(function SegmentCard({
     value: string,
     exercise: Exercise,
   ): void {
+    const queued = outbox.entries.find(entry => entry.row.programExerciseId === exerciseKey && entry.row.orderIndex === setIndex + 1);
+    if (queued) {
+      const number = field === "weight" ? parseFloat(value) : parseInt(value, 10);
+      const current = inputMap[exerciseKey]?.[setIndex];
+      const row = { ...queued.row,
+        weightKg: current ? (Number.isFinite(parseFloat(current.weight)) ? parseFloat(current.weight) : null) : queued.row.weightKg,
+        repsCompleted: current ? (Number.isFinite(parseInt(current.reps, 10)) ? parseInt(current.reps, 10) : null) : queued.row.repsCompleted,
+        [field === "weight" ? "weightKg" : "repsCompleted"]: Number.isFinite(number) ? number : null };
+      void saveStatus.saveRows({ userId, programId, programDayId, workoutSegmentId: segment.id,
+        ...capturedSetDate(), rows: [row] }, { confirm: false }).catch(() => {});
+    }
     setInputMap((current) => {
       const existing = current[exerciseKey] ?? [];
       const next = [...existing];
@@ -618,6 +639,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     setActiveSetKey(setKey);
 
     const payload: SaveSegmentLogPayload = {
+      ...capturedSetDate(),
       userId,
       programId,
       programDayId,
@@ -729,6 +751,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     setActiveSetKey(buildSetKey(exercise, uncheckedRows[uncheckedRows.length - 1].setIndex));
 
     const payload: SaveSegmentLogPayload = {
+      ...capturedSetDate(),
       userId,
       programId,
       programDayId,
@@ -1007,7 +1030,7 @@ export const SegmentCard = React.memo(function SegmentCard({
         >
           <Text style={{ color: Object.values(saveStatus.statuses).includes("failed") ? colors.error : colors.textSecondary }}>
             {Object.values(saveStatus.statuses).includes("failed") ? `${saveStatus.unsavedCount} set(s) not saved. Tap to retry.`
-              : Object.values(saveStatus.statuses).includes("waiting") ? "Will save when you're back online" : "Saving sets..."}
+              : Object.values(saveStatus.statuses).includes("waiting") ? (isOutboxAvailable() ? "Saved on this phone. Will sync when you're back online." : "Will save when you're back online") : "Saving sets..."}
           </Text>
         </PressableScale>
       ) : null}
@@ -1033,10 +1056,10 @@ export const SegmentCard = React.memo(function SegmentCard({
 
           {isRoundBased && Object.values(saveStatus.statuses).some(status => status !== "failed") ? (
             <Text accessibilityLabel={Object.values(saveStatus.statuses).includes("waiting") ? "Sets waiting for connection" : "Sets saving"} style={{ color: colors.textSecondary }}>
-              {Object.values(saveStatus.statuses).includes("waiting") ? "Will save when you're back online" : "Saving sets..."}
+              {Object.values(saveStatus.statuses).includes("waiting") ? (isOutboxAvailable() ? "Saved on this phone. Will sync when you're back online." : "Will save when you're back online") : "Saving sets..."}
             </Text>
           ) : null}
-          {!initialized && existingLogsQuery.isLoading ? (
+          {!initialized && (existingLogsQuery.isLoading || !outbox.loaded || loggableExercises.length > 0) ? (
             <View style={styles.loadingBlock}>
               <SkeletonBlock height={160} />
             </View>
@@ -1372,3 +1395,8 @@ const styles = StyleSheet.create({
   },
 });
 
+
+function capturedSetDate() {
+  const fields = localTrainingFields();
+  return { localDate: fields.local_date, timeZone: fields.timezone };
+}

@@ -1,7 +1,10 @@
+import * as setOutbox from "../../sync/setLogOutbox";
+import { stopOutboxSender } from "../../sync/setLogOutboxSender";
 import { formatReferralStats } from "../../utils/referralStats";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   Platform,
@@ -157,6 +160,7 @@ function SettingsRow({
 
 export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
+  const userId = useSessionStore((state) => state.userId);
   const clearSession = useSessionStore((state) => state.clearSession);
   const subscriptionStatus = useSessionStore((state) => state.subscriptionStatus);
   const showRestTimer = useSettingsStore((state) => state.showRestTimer);
@@ -223,6 +227,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
   const deleteAccountMutation = useMutation({
     mutationFn: deleteAccount,
     onSuccess: async () => {
+      if (userId) await setOutbox.clear(userId);
       await clearTokens();
       logOutPurchases();
       clearSession();
@@ -246,7 +251,8 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
 
   const referralStatsLabel = formatReferralStats(referralStatsQuery.data);
 
-  const handleLogout = async (): Promise<void> => {
+  const performLogout = async (): Promise<void> => {
+    if (userId) stopOutboxSender(userId);
     const refreshToken = await getRefreshToken();
     if (refreshToken) {
       void apiLogout(refreshToken).catch(() => {
@@ -260,6 +266,15 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
     logOutPurchases();
     clearSession();
     void queryClient.clear();
+  };
+
+  const handleLogout = async (): Promise<void> => {
+    const entries = userId ? await setOutbox.list(userId) : [];
+    if (entries.length) {
+      Alert.alert("Sets not synced yet", `${entries.length} sets haven't synced yet. If you sign out, they'll sync next time you sign in on this phone.`, [
+        { text: "Cancel", style: "cancel" }, { text: "Sign out", style: "destructive", onPress: () => { void performLogout(); } },
+      ]);
+    } else await performLogout();
   };
 
   const handleNotificationToggle = (

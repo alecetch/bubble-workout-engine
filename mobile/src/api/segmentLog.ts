@@ -11,6 +11,8 @@ export type SegmentLogRow = {
 };
 
 export type SaveSegmentLogPayload = {
+  localDate?: string | null;
+  timeZone?: string;
   userId?: string;
   programId: string;
   programDayId: string;
@@ -61,7 +63,8 @@ export async function saveSegmentExerciseLogs(
   const raw = await authPostJson<unknown, Record<string, unknown>>("/api/segment-log", {
       user_id: payload.userId,
       program_id: payload.programId,
-      ...localTrainingFields(),
+      ...(payload.localDate === null ? {} : payload.localDate === undefined ? localTrainingFields()
+        : { local_date: payload.localDate, timezone: payload.timeZone }),
       program_day_id: payload.programDayId,
       workout_segment_id: payload.workoutSegmentId,
       rows: payload.rows.map((r) => ({
@@ -71,7 +74,7 @@ export async function saveSegmentExerciseLogs(
         reps_completed: r.repsCompleted,
         rir_actual: r.rirActual ?? null,
       })),
-  });
+  }, { expectedUserId: payload.userId });
   const result = raw as Record<string, unknown>;
   return {
     saved: Number(result.saved ?? 0),

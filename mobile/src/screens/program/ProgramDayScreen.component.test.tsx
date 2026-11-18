@@ -1,3 +1,5 @@
+import * as setOutbox from "../../sync/setLogOutbox";
+import { entry as queuedEntry } from "../../sync/outboxTestFixture";
 import { toLocalIsoDate } from "../../utils/localDate";
 import { summaryCountCopy } from "../../utils/yearCopy";
 import React from "react";
@@ -489,6 +491,30 @@ describe("ProgramDayScreen", () => {
     expect(swapSheetMocks.segmentCardProps.at(-1).retryRequest).toBe(1);
     act(() => buttons[1].onPress());
     expect(alertSpy.mock.calls.some(call => call[0] === "Workout not finished")).toBe(true);
+  });
+  it("warns that all queued sets are safe on this phone without double-counting card counts", async () => {
+    await setOutbox.enqueue("user-1", [queuedEntry({ programDayId: "day-1", workoutSegmentId: "seg-1" })]);
+    const { navigation } = renderScreen(); await waitForLocalStateLoad();
+    const card = swapSheetMocks.segmentCardProps.at(-1);
+    act(() => card.onUnsavedSetsChange("seg-1", 1));
+    await act(async () => {});
+    const listener = navigation.addListener.mock.calls.at(-1)![1] as any;
+    act(() => listener({ preventDefault: vi.fn(), data: { action: { type: "GO_BACK" } } }));
+    const warning = alertSpy.mock.calls.find(call => call[0] === "Sets not synced yet");
+    expect(warning?.[1]).toBe("1 set(s) are saved on this phone and will sync when you're back online.");
+    expect((warning?.[2] as any[]).map(button => button.text)).toEqual(["Stay", "Leave"]);
+    await act(async () => { await setOutbox.clear("user-1"); });
+  });
+  it("keeps the old warning when a different in-memory set is not persisted", async () => {
+    await setOutbox.enqueue("user-1", [queuedEntry({ programDayId: "day-1", workoutSegmentId: "seg-1" })]);
+    const { navigation } = renderScreen(); await waitForLocalStateLoad();
+    act(() => swapSheetMocks.segmentCardProps.at(-1).onUnsavedSetsChange("seg-1", 1, ["different:0"]));
+    await act(async () => {});
+    const listener = navigation.addListener.mock.calls.at(-1)![1] as any;
+    act(() => listener({ preventDefault: vi.fn(), data: { action: { type: "GO_BACK" } } }));
+    const warning = alertSpy.mock.calls.find(call => call[0] === "Leave without saving?");
+    expect(warning?.[1]).toBe("2 set(s) haven't saved yet.");
+    await act(async () => { await setOutbox.clear("user-1"); });
   });
   it("blocks leaving with unsaved sets, then dispatches the confirmed action", async () => {
     const { navigation } = renderScreen(); await waitForLocalStateLoad();

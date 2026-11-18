@@ -103,3 +103,9 @@ describe("logger", () => {
     expect(logSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+it("records count-only outbox diagnostics as production breadcrumbs", () => {
+  vi.stubGlobal("__DEV__", false); vi.spyOn(console, "warn").mockImplementation(() => {});
+  logger.api("set-outbox-dropped", { reason: "invalid", count: 2 });
+  expect(addLogBreadcrumb).toHaveBeenCalledWith("api", "warning", "set-outbox-dropped", { reason: "invalid", count: 2 });
+});

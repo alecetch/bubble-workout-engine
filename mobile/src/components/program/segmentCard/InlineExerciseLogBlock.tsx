@@ -1,3 +1,4 @@
+import { isOutboxAvailable } from "../../../sync/setLogOutbox";
 import type { SetSaveStatus } from "../hooks/useSetSaveStatus";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -133,7 +134,7 @@ export function InlineExerciseLogBlock({
         );
       })}
       {setInputs.some((_row, index) => saveStatuses[buildSetKey(exercise, index)] === "waiting") ? (
-        <Text style={{ color: colors.textSecondary }}>Will save when you&apos;re back online</Text>
+        <Text style={{ color: colors.textSecondary }}>{isOutboxAvailable() ? "Saved on this phone. Will sync when you're back online." : "Will save when you're back online"}</Text>
       ) : null}
       {setInputs.some((_row, index) => saveStatuses[buildSetKey(exercise, index)] === "failed") ? (
         <Text style={{ color: colors.error }}>Not saved. Tap the set to retry.</Text>

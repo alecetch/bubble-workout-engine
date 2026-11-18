@@ -1,3 +1,6 @@
+import * as setOutbox from "../../sync/setLogOutbox";
+import { entry as queuedEntry } from "../../sync/outboxTestFixture";
+import { clearTokens } from "../../api/tokenStorage";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { axe } from "jest-axe";
@@ -134,6 +137,21 @@ function resetSettingsMocks() {
 describe("SettingsScreen", () => {
   beforeEach(() => {
     resetSettingsMocks();
+  });
+  for (const confirm of [false, true]) it(`warns before sign-out and ${confirm ? "retains entries on sign-out" : "does not sign out on Cancel"}`, async () => {
+    const clearSession = vi.fn(); vi.mocked(clearTokens).mockClear();
+    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ userId: "queued-user", clearSession }));
+    await setOutbox.enqueue("queued-user", [queuedEntry()]);
+    render(<SettingsScreen navigation={nav as any} route={{} as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "Log Out" }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Sets not synced yet", "1 sets haven't synced yet. If you sign out, they'll sync next time you sign in on this phone.", expect.any(Array)));
+    const buttons = alertSpy.mock.calls.at(-1)![2] as any[];
+    expect(buttons.map(b => b.text)).toEqual(["Cancel", "Sign out"]);
+    await act(async () => { buttons[confirm ? 1 : 0].onPress?.(); });
+    if (confirm) await waitFor(() => expect(clearSession).toHaveBeenCalledTimes(1));
+    else { expect(clearSession).not.toHaveBeenCalled(); expect(clearTokens).not.toHaveBeenCalled(); }
+    expect(await setOutbox.list("queued-user")).toHaveLength(1);
+    await setOutbox.clear("queued-user");
   });
   it.each([
     [{ conversions: 0, rewardsGranted: 0, rewardsPending: 0, rewardsRemainingThisYear: 2 }, 'Send your personal invite link.'],
@@ -549,13 +567,15 @@ describe("delete account modal", () => {
     vi.mocked(logOutPurchases).mockClear();
     vi.mocked(clearTokens).mockClear();
     const clearSession = vi.fn();
-    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession }));
+    await setOutbox.enqueue("deleting-user", [queuedEntry()]);
+    vi.mocked(useSessionStore).mockImplementation((selector: any) => selector({ clearSession, userId: "deleting-user" }));
     render(<SettingsScreen navigation={nav as any} route={{} as any} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
     await waitFor(() => expect(clearSession).toHaveBeenCalled());
     expect(logOutPurchases).toHaveBeenCalledTimes(1);
     expect(vi.mocked(clearTokens).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(logOutPurchases).mock.invocationCallOrder[0]);
+    expect(await setOutbox.list("deleting-user")).toEqual([]);
     expect(vi.mocked(logOutPurchases).mock.invocationCallOrder[0]).toBeLessThan(clearSession.mock.invocationCallOrder[0]);
   });
 
