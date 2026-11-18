@@ -1,8 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { deleteSubscriber } from "../revenuecatSync.js";
 import { fetchSubscriber, deriveStatusFromSubscriber, syncUserEntitlement, grantPromotionalEntitlement, extendAppleSubscription, deferGoogleSubscription } from "../revenuecatSync.js";
 
 const now = new Date("2026-10-27T12:00:00Z");
+
+for (const status of [200, 404]) test(`deleteSubscriber DELETE succeeds for ${status}`, async () => {
+  assert.deepEqual(await deleteSubscriber("user/id", { apiKey: " secret ", fetchImpl: async (url, options) => {
+    assert.equal(url, "https://api.revenuecat.com/v1/subscribers/user%2Fid");
+    assert.equal(options.method, "DELETE");
+    assert.equal(options.headers.Authorization, "Bearer secret");
+    assert.ok(options.signal instanceof AbortSignal);
+    return { status };
+  } }), { deleted: true });
+});
+for (const status of [401, 500]) test(`deleteSubscriber rejects ${status}`, async () => {
+  await assert.rejects(deleteSubscriber("id", { apiKey: "secret", fetchImpl: async () => ({ status }) }), { code: "revenuecat_delete_failed" });
+});
+test("deleteSubscriber skips a blank key and bounds a fetch that ignores abort", async () => {
+  assert.deepEqual(await deleteSubscriber("id", { apiKey: "  ", fetchImpl: () => assert.fail("no request") }), { skipped: true });
+  let signal;
+  await assert.rejects(deleteSubscriber("id", { apiKey: "secret", timeoutMs: 5, fetchImpl: async (_url, options) => {
+    signal = options.signal;
+    return new Promise(() => {});
+  } }), { code: "revenuecat_delete_failed" });
+  assert.equal(signal.aborted, true);
+  await assert.rejects(deleteSubscriber("id", { apiKey: "secret", fetchImpl: async () => { throw Error("secret upstream detail"); } }), error => {
+    assert.equal(error.code, "revenuecat_delete_failed");
+    assert.doesNotMatch(error.message, /secret upstream/);
+    return true;
+  });
+});
 const future = "2026-11-27T12:00:00Z";
 const past = "2026-09-27T12:00:00Z";
 const subscriber = (subscription = {}, expires = future) => ({ entitlements: { pro: { product_identifier: "monthly", expires_date: expires } }, subscriptions: { monthly: subscription } });

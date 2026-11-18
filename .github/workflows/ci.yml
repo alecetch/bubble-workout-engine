@@ -383,6 +383,11 @@ jobs:
       ONBOARDING_TEST_EMAIL: onboarding-beginner-ci@example.com
       ONBOARDING_TEST_PASSWORD: OnboardingCi123!
       ONBOARDING2_TEST_EMAIL: onboarding-intermediate-ci@example.com
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: e2e-storage-user
+      S3_SECRET_ACCESS_KEY: e2e-storage-password-ci-only
+      S3_PHYSIQUE_BUCKET: physique-photos
 
     steps:
       - uses: actions/checkout@v7
@@ -434,6 +439,25 @@ jobs:
             -password=workout-ci \
             -locations=filesystem:/flyway/sql \
             migrate
+
+      # Onboarding flows delete their throwaway account at the end. Deletion now
+      # requires successful photo-prefix cleanup, even when no photos were uploaded.
+      - name: Start E2E photo storage
+        working-directory: api
+        run: |
+          docker run --detach --name e2e-photo-storage -p 9000:5000 \
+            motoserver/moto@sha256:8860b18917e1ee4d067df19a406ae95dc26037e6965d5b499e1cffd33755b914
+          if ! curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 --retry-max-time 60 --max-time 2 http://127.0.0.1:9000/; then
+            docker logs e2e-photo-storage
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import { CreateBucketCommand } from '@aws-sdk/client-s3';
+          import { getClientForBucket, PHYSIQUE_BUCKET } from './src/services/s3Service.js';
+          const client = getClientForBucket(PHYSIQUE_BUCKET);
+          await client.send(new CreateBucketCommand({ Bucket: PHYSIQUE_BUCKET }));
+          client.destroy();
+          NODE
 
       - name: Start API
         run: |

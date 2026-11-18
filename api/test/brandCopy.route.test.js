@@ -6,7 +6,7 @@ import { insertEmailSignupAndNotify } from "../src/routes/websiteEnhancements.js
 import { createAffiliateHandlers } from "../src/routes/affiliateProgram.js";
 import { createGuideSignupHandler } from "../src/routes/contentHub.js";
 
-const paths = ["/", "/download", "/signup", "/signup/confirmed", "/privacy", "/terms", "/blog", "/guides", "/changelog",
+const paths = ["/", "/download", "/delete-account", "/signup", "/signup/confirmed", "/privacy", "/terms", "/blog", "/guides", "/changelog",
   "/hyrox", "/strength", "/pricing", "/support", "/press", "/testimonials", "/partners", "/partners/applied", "/ref/TEST123"];
 for (const section of ["blog", "guides"]) {
   for (const file of readdirSync(new URL(`../content/${section}/`, import.meta.url)).filter(name => name.endsWith(".md"))) paths.push(`/${section}/${file.slice(0, -3)}`);

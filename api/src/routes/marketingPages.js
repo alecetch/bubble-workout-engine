@@ -1,5 +1,9 @@
 import { getBrand, getFormaBrand } from "../config/brand.js";
 import express from "express";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import { PgRateLimitStore } from "../middleware/pgRateLimitStore.js";
+import { makeAccountDeletionService, AccountDeletionError } from "../services/accountDeletionService.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +13,79 @@ import { pool } from "../db.js";
 import { insertEmailSignupAndNotify } from "./websiteEnhancements.js";
 
 export const marketingRouter = express.Router();
+
+const DELETION_DUMMY_HASH = bcrypt.hashSync("account-deletion-dummy-password", 12);
+
+function deletionInstructions() {
+  return `in the app (Settings → Delete Account) or at <a href="/delete-account">${escapeHtml(getBrand().domain)}/delete-account</a>`;
+}
+
+function subscriptionReminder() {
+  return `<p><strong>Deleting your account does not cancel a store subscription.</strong> Manage or cancel it on the <a href="https://apps.apple.com/account/subscriptions">App Store</a> or <a href="https://play.google.com/store/account/subscriptions">Google Play</a>.</p>`;
+}
+
+export function renderDeleteAccountPage(res, { errorMsg = "", status = 200 } = {}) {
+  const supportEmail = escapeHtml(process.env.SUPPORT_EMAIL ?? getBrand().supportEmail);
+  res.status(status).setHeader("Cache-Control", "no-store");
+  sendHtml(res, "Delete your account", `<div class="container-narrow legal-page delete-account">
+    <h1>Delete your account</h1>
+    <p>This permanently deletes your ${escapeHtml(getBrand().name)} account, profile, programs, workout history and progress photos. Deletion is immediate and cannot be undone.</p>
+    <p>In the app: Settings → Delete Account.</p>
+    ${subscriptionReminder()}
+    ${errorMsg ? `<p role="alert">${escapeHtml(errorMsg)}</p>` : ""}
+    <form method="POST" action="/delete-account">
+      <label for="delete-email">Email</label><input id="delete-email" name="email" type="email" autocomplete="email" required>
+      <label for="delete-password">Password</label><input id="delete-password" name="password" type="password" autocomplete="current-password" required>
+      <label class="delete-confirm"><input name="confirm" type="checkbox" value="on" required> I understand this permanently deletes my account and data</label>
+      <button type="submit">Delete my account</button>
+    </form>
+    <p>Forgotten your password? Reset it in the app, or email <a href="mailto:${supportEmail}">${supportEmail}</a> from your account's email address and we'll delete it within 30 days.</p>
+  </div>`, { canonical: "/delete-account", noindex: true, description: `Delete your ${getBrand().name} account and data.`, extraCss: LEGAL_CSS + `
+    .delete-account form { display:flex; flex-direction:column; gap:12px; margin:24px 0; }
+    .delete-account input:not([type=checkbox]) { width:100%; box-sizing:border-box; padding:12px; border:1px solid #64748B; border-radius:6px; background:#0F172A; color:#F1F5F9; font:inherit; }
+    .delete-confirm { display:flex; align-items:flex-start; gap:10px; }
+    .delete-account button { background:#B91C1C; color:white; padding:14px; border:0; border-radius:6px; font:inherit; cursor:pointer; }
+    .delete-account [role=alert] { color:#FCA5A5; }
+  ` });
+}
+
+export function renderDeleteAccountDone(res) {
+  res.setHeader("Cache-Control", "no-store");
+  sendHtml(res, "Account deleted", `<div class="container-narrow legal-page"><h1>Your account and data have been deleted.</h1>${subscriptionReminder()}</div>`, {
+    canonical: "/delete-account", noindex: true, description: "Your account and data have been deleted.", extraCss: LEGAL_CSS,
+  });
+}
+
+export function createDeleteAccountHandler({ db = pool, accountDeletion = makeAccountDeletionService({ db }), compare = bcrypt.compare } = {}) {
+  return async (req, res) => {
+    try {
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (!email || !password || req.body?.confirm !== "on") {
+        await compare(password, DELETION_DUMMY_HASH);
+        return renderDeleteAccountPage(res, { status: 400, errorMsg: "Please fill in every field and tick the box." });
+      }
+      const { rows } = await db.query("SELECT id, password_hash FROM app_user WHERE lower(email) = $1", [email]);
+      const user = rows[0];
+      const matches = await compare(password, user?.password_hash || DELETION_DUMMY_HASH);
+      if (!user?.password_hash || !matches) return renderDeleteAccountPage(res, { status: 400, errorMsg: "That email and password don't match an account." });
+      await accountDeletion.deleteAccount(user.id, { source: "web" });
+      return renderDeleteAccountDone(res);
+    } catch (error) {
+      if (error instanceof AccountDeletionError && error.code === "storage_failed") {
+        return renderDeleteAccountPage(res, { status: 503, errorMsg: "We couldn't delete your account just now. Nothing was removed. Please try again in a few minutes, or email support." });
+      }
+      req.log?.error?.({ event: "account.delete.web_failed" });
+      return renderDeleteAccountPage(res, { status: 500, errorMsg: "We couldn't delete your account just now. Please try again later." });
+    }
+  };
+}
+
+export function createDeleteAccountLimiter({ store = new PgRateLimitStore({ prefix: "auth:delete:ip:", failMode: "open" }) } = {}) {
+  return rateLimit({ windowMs: 15 * 60 * 1000, max: 5, store, standardHeaders: true, legacyHeaders: false,
+    handler: (_req, res) => renderDeleteAccountPage(res, { status: 429, errorMsg: "Too many attempts. Try again later." }),
+  });
+}
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const TESTIMONIALS_FILE = join(__dirname, "../../content/testimonials.json");
@@ -258,7 +335,7 @@ function privacyHtml() {
 <li><strong>Export</strong> your workout data</li>
 <li><strong>Withdraw consent</strong> for optional processing</li>
 </ul>
-<p>To exercise these rights, contact us at support@200days.app. To delete your account, go to Settings - Account - Delete Account in the app.</p>
+<p>To exercise these rights, contact us at support@200days.app. You can delete your account ${deletionInstructions()}.</p>
 <h2>8. Children</h2>
 <p>The Service is not directed at children under 16. We do not knowingly collect personal data from anyone under 16.</p>
 <h2>9. Changes to This Policy</h2>
@@ -289,7 +366,7 @@ function termsHtml() {
 <h2>6. Your Content</h2><p>You retain ownership of your fitness data and optional physique photos. By submitting Your Content, you grant ${getFormaBrand().name} a limited licence to store and process it solely to provide the Service.</p>
 <h2>7. Health and Safety Disclaimer</h2><p><strong>The Service provides training programming and fitness guidance. It is not a substitute for professional medical advice, diagnosis, or treatment.</strong></p><p>Train within your limits. Stop any exercise that causes pain or discomfort.</p>
 <h2>8. Intellectual Property</h2><p>The Service, including its design, code, content, and branding, is owned by ${getFormaBrand().name}. Your account data and workout logs belong to you.</p>
-<h2>9. Termination</h2><p>We may suspend or terminate your account if you violate these Terms or engage in fraudulent activity. You may close your account at any time via Settings - Account - Delete Account.</p>
+<h2>9. Termination</h2><p>We may suspend or terminate your account if you violate these Terms or engage in fraudulent activity. You may close your account at any time ${deletionInstructions()}.</p>
 <h2>10. Limitation of Liability</h2><p>To the maximum extent permitted by law, ${getFormaBrand().name} shall not be liable for indirect, incidental, special, consequential, or punitive damages. Nothing limits liability for death or personal injury caused by negligence, fraud, or any liability that cannot be excluded by law.</p>
 <h2>11. Disclaimer of Warranties</h2><p>The Service is provided "as is" and "as available" without warranties of any kind.</p>
 <h2>12. Governing Law and Dispute Resolution</h2><p>These Terms are governed by the laws of England and Wales.</p>
@@ -854,7 +931,7 @@ function supportHandler(_req, res) {
   <h1>Support</h1><p class="intro">Get answers to common questions, or contact us directly.</p><h2>Frequently asked questions</h2>
   <div class="faq-item"><p class="faq-q">How do I cancel my subscription?</p><p class="faq-a">Subscriptions will be managed through your device once ${getBrand().name} is available.</p></div>
   <div class="faq-item"><p class="faq-q">Can I use ${getBrand().name} without a subscription?</p><p class="faq-a">Launch access details will be announced before the app is available.</p></div>
-  <div class="faq-item"><p class="faq-q">How do I delete my account and data?</p><p class="faq-a">Go to Settings - Account - Delete Account in the app.</p></div>
+  <div class="faq-item"><p class="faq-q">How do I delete my account and data?</p><p class="faq-a">Delete your account ${deletionInstructions()}.</p></div>
   <div class="faq-item"><p class="faq-q">The app isn't connecting - what do I do?</p><p class="faq-a">Try closing and reopening the app. If errors continue, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p></div>
   <div class="faq-item"><p class="faq-q">How do I update my training schedule or equipment?</p><p class="faq-a">Go to Settings - Recalibrate in the app.</p></div>
   <div class="faq-item"><p class="faq-q">What is Hyrox and does ${getBrand().name} support it?</p><p class="faq-a">Hyrox combines running and functional workout stations. ${getBrand().variant === "200days" ? "We have" : `${getBrand().name} has`} native support for Hyrox conditioning.</p></div>
@@ -870,6 +947,8 @@ function supportHandler(_req, res) {
 
 marketingRouter.get("/", homeHandler);
 marketingRouter.get("/download", downloadHandler);
+marketingRouter.get("/delete-account", (_req, res) => renderDeleteAccountPage(res));
+marketingRouter.post("/delete-account", createDeleteAccountLimiter(), express.urlencoded({ extended: false }), createDeleteAccountHandler());
 marketingRouter.post("/download/notify", express.urlencoded({ extended: false }), createDownloadNotifyHandler());
 marketingRouter.get("/hyrox", gatePage, hyroxHandler);
 marketingRouter.get("/strength", gatePage, strengthHandler);

@@ -57,6 +57,14 @@ test.after(() => {
 });
 test.after(closeDb);
 
+for (const type of ["RENEWAL", "EXPIRATION"]) test(`deleted user's ${type} is acknowledged without recreating the user`, { skip: DATABASE_SKIP }, () => withUsers(async db => {
+  const id = randomUUID(), res = mockRes();
+  await makeHandler(db)(validReq(type, { app_user_id: id, original_app_user_id: id }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.handled, false); assert.equal(res.body.reason, "unknown_user");
+  assert.equal((await db.query("SELECT id FROM app_user WHERE id=$1", [id])).rowCount, 0);
+}));
+
 test('qualifying webhook records pending conversion without changing response', { skip: DATABASE_SKIP }, () => withUsers(async (db, [referrer, referred]) => {
   await db.query("INSERT INTO referral_conversion(referrer_user_id,referred_user_id,referred_code) VALUES ($1,$2,'CODE')", [referrer, referred]);
   const res = mockRes(); const req = validReq('INITIAL_PURCHASE', { app_user_id: referred, environment: 'PRODUCTION', period_type: 'NORMAL', id: randomUUID() });

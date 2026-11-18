@@ -178,6 +178,7 @@ export function wrapPage(title, bodyHtml, extraCssOrOptions = "") {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)} - ${brand.titleSuffix}</title>
   <meta name="description" content="${escapeHtml(description)}">
+  ${opts.noindex ? '<meta name="robots" content="noindex">' : ""}
   <meta property="og:title" content="${escapeHtml(title)} - ${brand.titleSuffix}">
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:image" content="${escapeHtml(ogImage)}">
