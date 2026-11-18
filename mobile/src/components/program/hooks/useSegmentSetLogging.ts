@@ -4,7 +4,7 @@ import type { ProgramDayFullResponse } from "../../../api/programViewer";
 import type { SegmentLogRow } from "../../../api/segmentLog";
 import {
   buildInitialSetInputMap,
-  getExerciseSetCount,
+  findNextUncheckedSetKey,
   guidelinePrefill,
   repsPrefill,
   type SetInputState,
@@ -16,23 +16,6 @@ function isUnloadedExercise(exercise: Exercise): boolean {
   return exercise.isUnloaded === true || exercise.isLoadable === false;
 }
 
-function findNextUncheckedSetKey(
-  exercises: Exercise[],
-  doneSetKeys: Set<string>,
-): string | null {
-  for (const exercise of exercises) {
-    const exerciseKey = exercise.id ?? exercise.exerciseId ?? exercise.name;
-    const setCount = getExerciseSetCount(exercise);
-    for (let setIndex = 0; setIndex < setCount; setIndex += 1) {
-      const setKey = `${exerciseKey}:${setIndex}`;
-      if (!doneSetKeys.has(setKey)) {
-        return setKey;
-      }
-    }
-  }
-  return null;
-}
-
 export function useSegmentSetLogging(params: {
   loggableExercises: Exercise[];
   existingLogsQuery: { data: SegmentLogRow[] | undefined; isLoading: boolean };
@@ -40,7 +23,8 @@ export function useSegmentSetLogging(params: {
   isRoundBased: boolean;
   totalRounds: number;
   preserveInputs?: boolean;
-  onRoundStateReset?: () => void;
+  onRoundStateReset?: (completedRounds: Set<number>) => void;
+  onInitialize?: () => void;
 }): {
   inputMap: Record<string, SetInputState[]>;
   setInputMap: React.Dispatch<React.SetStateAction<Record<string, SetInputState[]>>>;
@@ -59,6 +43,7 @@ export function useSegmentSetLogging(params: {
     isRoundBased,
     totalRounds,
     onRoundStateReset,
+    onInitialize,
     preserveInputs,
   } = params;
   const [inputMap, setInputMap] = useState<Record<string, SetInputState[]>>({});
@@ -76,6 +61,12 @@ export function useSegmentSetLogging(params: {
   useEffect(() => {
     if (!inlineLoggingOpen || initialized || preserveInputs || existingLogsQuery.isLoading) return;
     const existingRows = existingLogsQuery.data ?? [];
+    const restoreKeys = (inputs: Record<string, SetInputState[]>) => new Set(
+      existingRows.filter(row => row.programExerciseId && Number.isInteger(row.orderIndex) &&
+        inputs[row.programExerciseId]?.[row.orderIndex - 1])
+        .map(row => `${row.programExerciseId}:${row.orderIndex - 1}`),
+    );
+    onInitialize?.();
     if (isRoundBased) {
       const nextInputMap = Object.fromEntries(
         loggableExercises.map((exercise) => {
@@ -104,13 +95,20 @@ export function useSegmentSetLogging(params: {
           return acc;
         }, {}),
       );
-      setDoneSetKeys(new Set());
-      onRoundStateReset?.();
+      const restoredKeys = restoreKeys(nextInputMap);
+      setDoneSetKeys(restoredKeys);
+      const completedRounds = new Set(
+        Array.from({ length: totalRounds }, (_, index) => index).filter(index =>
+          loggableExercises.length > 0 && loggableExercises.every(exercise => restoredKeys.has(`${exercise.id}:${index}`))),
+      );
+      onRoundStateReset?.(completedRounds);
       if (loggableExercises.length === 0) return;
       setInitialized(true);
       return;
     }
-    setInputMap(buildInitialSetInputMap(loggableExercises, existingRows));
+    const nextInputMap = buildInitialSetInputMap(loggableExercises, existingRows);
+    const restoredKeys = restoreKeys(nextInputMap);
+    setInputMap(nextInputMap);
     setExerciseRirMap(
       existingRows.reduce<Record<string, number | null>>((acc, row) => {
         if (!row.programExerciseId) return acc;
@@ -119,8 +117,8 @@ export function useSegmentSetLogging(params: {
         return acc;
       }, {}),
     );
-    setDoneSetKeys(new Set());
-    setActiveSetKey(findNextUncheckedSetKey(loggableExercises, new Set()));
+    setDoneSetKeys(restoredKeys);
+    setActiveSetKey(findNextUncheckedSetKey(loggableExercises, restoredKeys));
     if (loggableExercises.length === 0) return;
     setInitialized(true);
   }, [

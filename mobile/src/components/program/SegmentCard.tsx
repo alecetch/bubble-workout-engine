@@ -16,6 +16,7 @@ import { typography } from "../../theme/typography";
 import { PressableScale } from "../interaction/PressableScale";
 import { SkeletonBlock } from "../feedback/SkeletonBlock";
 import {
+  findNextUncheckedSetKey,
   formatRoundSummary,
   getExerciseSetCount,
   type SetInputState,
@@ -82,23 +83,6 @@ function roundToNearestMinute(seconds: number | null): number | null {
   return seconds % 60 > 30
     ? Math.ceil(seconds / 60) * 60
     : Math.floor(seconds / 60) * 60;
-}
-
-function findNextUncheckedSetKey(
-  exercises: Exercise[],
-  doneSetKeys: Set<string>,
-): string | null {
-  for (const exercise of exercises) {
-    const exerciseKey = exercise.id ?? exercise.exerciseId ?? exercise.name;
-    const setCount = getExerciseSetCount(exercise);
-    for (let setIndex = 0; setIndex < setCount; setIndex += 1) {
-      const setKey = `${exerciseKey}:${setIndex}`;
-      if (!doneSetKeys.has(setKey)) {
-        return setKey;
-      }
-    }
-  }
-  return null;
 }
 
 function isExerciseFullyLogged(exercise: Exercise, doneSetKeys: Set<string>): boolean {
@@ -182,6 +166,8 @@ export const SegmentCard = React.memo(function SegmentCard({
   const [showAdjustControls, setShowAdjustControls] = useState(false);
   const pendingEmptyRoundRef = useRef(false);
   const unsavedCountRef = useRef(0);
+  // Restored rows count as logged data, but only a new save may announce completion.
+  const doneKeysFromRestore = useRef(true);
   const {
     activeRoundIndex,
     setActiveRoundIndex,
@@ -212,14 +198,21 @@ export const SegmentCard = React.memo(function SegmentCard({
     isRoundBased,
     totalRounds,
     preserveInputs: unsavedCountRef.current > 0,
-    onRoundStateReset: () => {
+    onInitialize: () => { doneKeysFromRestore.current = true; },
+    onRoundStateReset: completedRounds => {
       resetRoundState();
+      setCompletedRoundIndices(completedRounds);
+      setActiveRoundIndex(Array.from({ length: totalRounds }, (_, index) => index)
+        .find(index => !completedRounds.has(index)) ?? Math.max(0, totalRounds - 1));
       pendingEmptyRoundRef.current = false;
     },
   });
   const saveStatus = useSetSaveStatus({
     save: payload => saveLogsMutation.mutateAsync(payload),
-    onSaved: keys => setDoneSetKeys(current => new Set([...current, ...keys])),
+    onSaved: keys => {
+      doneKeysFromRestore.current = false;
+      setDoneSetKeys(current => new Set([...current, ...keys]));
+    },
   });
   unsavedCountRef.current = saveStatus.unsavedCount;
   useEffect(() => {
@@ -337,7 +330,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   const allSetsSavedNotified = useRef(false);
   useEffect(() => {
     const allSaved = !isRoundBased && totalSetCount > 0 && doneSetKeys.size >= totalSetCount;
-    if (allSaved && !allSetsSavedNotified.current) onAllSetsSaved(segment.id);
+    if (allSaved && !allSetsSavedNotified.current && !doneKeysFromRestore.current) onAllSetsSaved(segment.id);
     allSetsSavedNotified.current = allSaved;
   }, [doneSetKeys, isRoundBased, totalSetCount, onAllSetsSaved, segment.id]);
 
@@ -501,7 +494,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     }
     const nextCompleted = new Set([...completedRoundIndices, roundIndex]);
     setCompletedRoundIndices(nextCompleted);
-    if (isLastRound) {
+    if (nextCompleted.size >= totalRounds) {
       const ids = loggableExercises
         .map((exercise) => exercise.id)
         .filter((id): id is string => Boolean(id));
@@ -512,7 +505,8 @@ export const SegmentCard = React.memo(function SegmentCard({
       closeInlinePanel({ clearInputs: false });
       return;
     }
-    const nextRoundIndex = roundIndex + 1;
+    const nextRoundIndex = Array.from({ length: totalRounds }, (_, index) => index)
+      .find(index => !nextCompleted.has(index)) ?? totalRounds - 1;
     setInputMap((prev) => {
       const next: Record<string, SetInputState[]> = {};
       for (const [key, sets] of Object.entries(prev)) {
