@@ -30,6 +30,7 @@ type OnboardingScaffoldProps = {
   scrollViewRef?: RefObject<ScrollViewInstance | null>;
   scrollViewTestID?: string;
   nextTestID?: string;
+  showProgress?: boolean;
 };
 
 const NAV_BAR_HEIGHT = 92;
@@ -48,6 +49,7 @@ export function OnboardingScaffold({
   scrollViewRef,
   scrollViewTestID,
   nextTestID,
+  showProgress = true,
 }: OnboardingScaffoldProps): React.JSX.Element {
   return (
     <KeyboardAvoidingView
@@ -56,7 +58,7 @@ export function OnboardingScaffold({
       keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
     >
       <View style={styles.topBlock}>
-        <ProgressHeader step={step} />
+        {showProgress ? <ProgressHeader step={step} /> : null}
         <ErrorBanner visible={errorBannerVisible} />
       </View>
 

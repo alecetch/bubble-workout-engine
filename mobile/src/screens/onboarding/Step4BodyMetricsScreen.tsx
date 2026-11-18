@@ -1,3 +1,5 @@
+import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
+import { useReviewEditBack } from "./useReviewEditBack";
 import { PHYSIQUE_ENABLED } from "../../config/features";
 import React, { useMemo, useState } from "react";
 import {
@@ -37,7 +39,9 @@ import type { OnboardingStackParamList } from "../../navigation/OnboardingNaviga
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Step4BodyMetrics">;
 type UnitSystem = "metric" | "imperial";
 
-export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element {
+export function Step4BodyMetricsScreen({ navigation, route }: Props): React.JSX.Element {
+  const returnToReview = route?.params?.returnToReview ?? false;
+  const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step3Schedule"));
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const updateClientProfile = useUpdateClientProfile(profileId || "");
@@ -169,15 +173,15 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
         heightCm,
         weightKg,
         preferredUnit: unitSystem === "imperial" ? "lbs" : "kg",
-        onboardingStepCompleted: 4,
-        onboardingCompletedAt: new Date().toISOString(),
+        onboardingStepCompleted: Math.max(draft.onboardingStepCompleted, 4) as typeof draft.onboardingStepCompleted,
+        ...(!returnToReview ? { onboardingCompletedAt: new Date().toISOString() } : {}),
       });
       if (PHYSIQUE_ENABLED && photoUri) {
         void startBackgroundPhotoUpload(photoUri);
       }
-      navigation.navigate("SplitReview", {
-        daysPerWeek: draft.preferredDays.length || undefined,
-      });
+      followSavedRoute(navigation, nextRouteAfterSave("bodyMetrics", {
+        returnToReview, daysPerWeek: draft.preferredDays.length,
+      }));
     } catch {
       await hapticHeavy();
       setFieldErrors({ heightCm: "Unable to save this step. Please try again." });
@@ -192,11 +196,12 @@ export function Step4BodyMetricsScreen({ navigation }: Props): React.JSX.Element
       title="Body metrics"
       subtitle="Optional details that help calibrate load targets and track where you started."
       errorBannerVisible={false}
-      onBack={() => navigation.replace("Step3Schedule")}
+      onBack={editBack}
       onNext={() => {
         void handleFinish();
       }}
-      nextLabel="Finish"
+      nextLabel={returnToReview ? "Save" : "Finish"}
+      showProgress={!returnToReview}
       nextDisabled={isSaving || meQuery.isLoading}
       isSaving={isSaving}
     >

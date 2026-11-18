@@ -1,3 +1,5 @@
+import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
+import { useReviewEditBack } from "./useReviewEditBack";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ScrollViewInstance } from "react-native";
@@ -235,8 +237,10 @@ function AnchorFamilyRow({
   );
 }
 
-export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Element {
+export function Step2bBaselineLoadsScreen({ navigation, route }: Props): React.JSX.Element {
   const scrollRef = useRef<ScrollViewInstance | null>(null);
+  const returnToReview = route?.params?.returnToReview ?? false;
+  const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step2Equipment"));
   const meQuery = useMe();
   const referenceDataQuery = useReferenceData();
   const profileId = meQuery.data?.clientProfileId ?? "";
@@ -278,7 +282,7 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
   const levelKey = fitnessLevelKey(draft.fitnessLevel);
 
   function handleBack(): void {
-    navigation.replace("Step2Equipment");
+    editBack();
   }
 
   function handleUnitChange(next: Unit): void {
@@ -307,7 +311,7 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
         preferredUnit: unit,
       });
       setDraft({ anchorLifts: [], anchorLiftsSkipped: true, preferredUnit: unit });
-      navigation.replace("YearGoal");
+      followSavedRoute(navigation, nextRouteAfterSave("baselineLoads", { returnToReview }));
     } catch {
       setSaveError("Unable to save this step. Please try again.");
       await hapticHeavy();
@@ -361,7 +365,7 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
         anchorLiftsSkipped: allSkipped,
         preferredUnit: unit,
       });
-      navigation.replace("YearGoal");
+      followSavedRoute(navigation, nextRouteAfterSave("baselineLoads", { returnToReview }));
     } catch {
       setSaveError("Unable to save this step. Please try again.");
       await hapticHeavy();
@@ -380,7 +384,8 @@ export function Step2bBaselineLoadsScreen({ navigation }: Props): React.JSX.Elem
       onNext={() => {
         void handleContinue();
       }}
-      nextLabel="Continue"
+      nextLabel={returnToReview ? "Save" : "Continue"}
+      showProgress={!returnToReview}
       nextDisabled={isSaving || referenceDataQuery.isLoading}
       isSaving={isSaving}
       scrollViewRef={scrollRef}

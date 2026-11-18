@@ -3,7 +3,7 @@ import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step3ScheduleMetricsScreen } from "./Step3ScheduleMetricsScreen";
-import { useMe, useUpdateClientProfile } from "../../api/hooks";
+import { useClientProfile, useMe, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import type { OnboardingDraft } from "../../state/onboarding/types";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../../__test-utils__";
 
 vi.mock("../../api/hooks", () => ({
+  useClientProfile: vi.fn(),
   useMe: vi.fn(),
   useUpdateClientProfile: vi.fn(),
 }));
@@ -89,14 +90,38 @@ function mockStore(draft: OnboardingDraft, overrides: Record<string, unknown> = 
   mockZustandSelector(useOnboardingStoreMock as any, state);
 }
 
-function renderScreen() {
+function renderScreen(params = {}) {
   const navigation = { replace: vi.fn(), navigate: vi.fn() };
-  render(<Step3ScheduleMetricsScreen navigation={navigation as any} route={{} as any} />);
+  render(<Step3ScheduleMetricsScreen navigation={navigation as any} route={{ params } as any} />);
   return navigation;
 }
 
 describe("Step3ScheduleMetricsScreen", () => {
+  it("saves an edit back to review without reducing completed onboarding progress", async () => {
+    mockStore({ ...validDraft, onboardingStepCompleted: 4 });
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+    expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ onboardingStepCompleted: 4 }));
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it("recommends a split only when the edit changes the day count", async () => {
+    mockStore({ ...validDraft, preferredDays: ["Mon", "Wed", "Fri"], onboardingStepCompleted: 4 });
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("SplitReview", { daysPerWeek: 3 }));
+  });
+
+  it("discards an edit on Back without patching the profile", () => {
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(navigation.replace).toHaveBeenCalledWith("ProgramReview");
+    expect(updateProfileMutateAsyncMock).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
+    vi.mocked(useClientProfile).mockReturnValue({ data: { equipmentPreset: "commercial_gym", equipmentItemCodes: [], preferredDays: ["Mon", "Wed"] } } as any);
     updateProfileMutateAsyncMock.mockReset();
     setDraftMock.mockReset();
     setFieldErrorsMock.mockReset();

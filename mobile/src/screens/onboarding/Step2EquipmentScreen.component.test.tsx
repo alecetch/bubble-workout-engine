@@ -3,11 +3,12 @@ import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Step2EquipmentScreen } from "./Step2EquipmentScreen";
-import { useEquipmentItems, useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
+import { useClientProfile, useEquipmentItems, useMe, useReferenceData, useUpdateClientProfile } from "../../api/hooks";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { DEFAULT_ONBOARDING_DRAFT, type OnboardingDraft } from "../../state/onboarding/types";
 
 vi.mock("../../api/hooks", () => ({
+  useClientProfile: vi.fn(),
   useMe: vi.fn(),
   useReferenceData: vi.fn(),
   useEquipmentItems: vi.fn(),
@@ -134,19 +135,42 @@ function mockStore(draft: OnboardingDraft, overrides: Record<string, unknown> = 
   (useOnboardingStoreMock as any).getState = () => state;
 }
 
-function renderScreen() {
+function renderScreen(params = {}) {
   const navigation = { replace: vi.fn(), navigate: vi.fn() };
   render(
     <Step2EquipmentScreen
       navigation={navigation as any}
-      route={{ key: "Step2Equipment", name: "Step2Equipment" } as any}
+      route={{ key: "Step2Equipment", name: "Step2Equipment", params } as any}
     />,
   );
   return navigation;
 }
 
 describe("Step2EquipmentScreen", () => {
+  it("returns a beginner edit to review without showing YearGoal", async () => {
+    mockStore(buildDraft({ fitnessLevel: "Beginner", selectedEquipmentCodes: ["barbell", "bench"], onboardingStepCompleted: 4 }));
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+    expect(navigation.replace).not.toHaveBeenCalledWith("YearGoal");
+  });
+
+  it("returns unchanged intermediate equipment to review", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["bench", "barbell"] }));
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+  });
+
+  it("keeps edit mode for baseline loads when intermediate equipment changes", async () => {
+    mockStore(buildDraft({ selectedEquipmentCodes: ["barbell"] }));
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("Step2bBaselineLoads", { returnToReview: true }));
+  });
+
   beforeEach(() => {
+    vi.mocked(useClientProfile).mockReturnValue({ data: { equipmentPreset: "commercial_gym", equipmentItemCodes: ["barbell", "bench"], preferredDays: ["Mon", "Wed"] } } as any);
     updateProfileMutateAsyncMock.mockReset();
     setDraftMock.mockReset();
     setFieldErrorsMock.mockReset();

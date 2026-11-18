@@ -103,13 +103,29 @@ function mockStore(overrides = {}) {
   mockZustandSelector(useOnboardingStoreMock as any, state);
 }
 
-function renderScreen() {
+function renderScreen(params = {}) {
   const navigation = { navigate: vi.fn(), replace: vi.fn() };
-  render(<Step4BodyMetricsScreen navigation={navigation as any} route={{} as any} />);
+  render(<Step4BodyMetricsScreen navigation={navigation as any} route={{ params } as any} />);
   return navigation;
 }
 
 describe("Step4BodyMetricsScreen", () => {
+  it("saves edits back to review without resetting completion time", async () => {
+    mockStore({ onboardingStepCompleted: 4 });
+    const navigation = renderScreen({ returnToReview: true });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("ProgramReview", { preserveDraft: true }));
+    expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ onboardingStepCompleted: 4 }));
+    expect(updateProfileMutateAsyncMock.mock.calls[0][0]).not.toHaveProperty("onboardingCompletedAt");
+  });
+
+  it("still records first-run completion and opens SplitReview", async () => {
+    const navigation = renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith("SplitReview", { daysPerWeek: 2 }));
+    expect(updateProfileMutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ onboardingCompletedAt: expect.any(String) }));
+  });
+
   it("hides Starting photo and completes without consent, queueing or upload when off", async () => {
     featureFlags.PHYSIQUE_ENABLED = false;
     const navigation = renderScreen();
