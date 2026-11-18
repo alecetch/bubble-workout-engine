@@ -70,3 +70,18 @@ describe("app version headers", () => {
   for (const call of fetcher.mock.calls) expect(call[1].headers).toMatchObject({ "X-App-Platform": "ios", "X-App-Version": "1.2.3", "X-App-Build": "17" });
  });
 });
+
+it("does not post one user's queued rows after credentials switch to another user", async () => {
+  const { authenticatedFetch } = await import("./client");
+  const { getAccessToken } = await import("./tokenStorage");
+  const { useSessionStore } = await import("../state/session/sessionStore");
+  let resolve!: (token: string) => void;
+  vi.mocked(getAccessToken).mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  useSessionStore.setState({ userId: "a", isAuthenticated: true });
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  const request = authenticatedFetch("/api/segment-log", { method: "POST", expectedUserId: "a" });
+  useSessionStore.setState({ userId: "b", isAuthenticated: true }); resolve("b-token");
+  await expect(request).rejects.toMatchObject({ status: 401 });
+  expect(fetch).not.toHaveBeenCalled(); expect(useSessionStore.getState().userId).toBe("b");
+  useSessionStore.getState().clearSession();
+});

@@ -1,3 +1,4 @@
+import type { OutboxEntry } from "../../../sync/setLogOutbox";
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
@@ -17,6 +18,8 @@ function isUnloadedExercise(exercise: Exercise): boolean {
 }
 
 export function useSegmentSetLogging(params: {
+  outboxEntries?: OutboxEntry[];
+  outboxLoaded?: boolean;
   loggableExercises: Exercise[];
   existingLogsQuery: { data: SegmentLogRow[] | undefined; isLoading: boolean };
   inlineLoggingOpen: boolean;
@@ -59,8 +62,23 @@ export function useSegmentSetLogging(params: {
   }, [inlineLoggingOpen, preserveInputs]);
 
   useEffect(() => {
-    if (!inlineLoggingOpen || initialized || preserveInputs || existingLogsQuery.isLoading) return;
-    const existingRows = existingLogsQuery.data ?? [];
+    if (!inlineLoggingOpen || initialized || existingLogsQuery.isLoading || params.outboxLoaded === false) return;
+    const queued = params.outboxEntries ?? [];
+    const byKey = new Map((existingLogsQuery.data ?? []).map(row => [`${row.programExerciseId}:${row.orderIndex}`, row]));
+    queued.forEach(entry => byKey.set(`${entry.row.programExerciseId}:${entry.row.orderIndex}`, entry.row));
+    const existingRows = [...byKey.values()];
+    const overlay = (inputs: Record<string, SetInputState[]>) => {
+      for (const { row } of queued) {
+        const sets = inputs[row.programExerciseId];
+        if (sets && row.orderIndex > 0) while (sets.length < row.orderIndex) {
+          sets.push({ ...(sets[sets.length - 1] ?? { weight: "", reps: "", rirActual: null }) });
+        }
+        const input = sets?.[row.orderIndex - 1];
+        if (input) { input.weight = row.weightKg == null ? "" : String(row.weightKg);
+          input.reps = row.repsCompleted == null ? "" : String(row.repsCompleted); input.rirActual = row.rirActual; }
+      }
+      return inputs;
+    };
     const restoreKeys = (inputs: Record<string, SetInputState[]>) => new Set(
       existingRows.filter(row => row.programExerciseId && Number.isInteger(row.orderIndex) &&
         inputs[row.programExerciseId]?.[row.orderIndex - 1])
@@ -86,7 +104,7 @@ export function useSegmentSetLogging(params: {
           ];
         }),
       );
-      setInputMap(nextInputMap);
+      setInputMap(overlay(nextInputMap));
       setExerciseRirMap(
         existingRows.reduce<Record<string, number | null>>((acc, row) => {
           if (!row.programExerciseId) return acc;
@@ -103,12 +121,13 @@ export function useSegmentSetLogging(params: {
       );
       onRoundStateReset?.(completedRounds);
       if (loggableExercises.length === 0) return;
+      setExerciseRirMap(current => ({ ...current, ...Object.fromEntries(queued.map(e => [e.row.programExerciseId, e.row.rirActual])) }));
       setInitialized(true);
       return;
     }
-    const nextInputMap = buildInitialSetInputMap(loggableExercises, existingRows);
+    const nextInputMap = overlay(buildInitialSetInputMap(loggableExercises, existingRows));
     const restoredKeys = restoreKeys(nextInputMap);
-    setInputMap(nextInputMap);
+    setInputMap(overlay(nextInputMap));
     setExerciseRirMap(
       existingRows.reduce<Record<string, number | null>>((acc, row) => {
         if (!row.programExerciseId) return acc;
@@ -120,8 +139,11 @@ export function useSegmentSetLogging(params: {
     setDoneSetKeys(restoredKeys);
     setActiveSetKey(findNextUncheckedSetKey(loggableExercises, restoredKeys));
     if (loggableExercises.length === 0) return;
+    setExerciseRirMap(current => ({ ...current, ...Object.fromEntries(queued.map(e => [e.row.programExerciseId, e.row.rirActual])) }));
     setInitialized(true);
   }, [
+    params.outboxEntries,
+    params.outboxLoaded,
     existingLogsQuery.data,
     existingLogsQuery.isLoading,
     inlineLoggingOpen,

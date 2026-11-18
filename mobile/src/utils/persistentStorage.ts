@@ -53,6 +53,10 @@ export function getPersistentStorage(): StorageLike {
   return inMemoryStorage;
 }
 
+export function isPersistentStorageAvailable(): boolean {
+  return shouldUseTestStorage() || hasStorageMethods(AsyncStorage);
+}
+
 export function _resetForTest(): void {
   inMemoryStore.clear();
   warnedUnavailable = false;

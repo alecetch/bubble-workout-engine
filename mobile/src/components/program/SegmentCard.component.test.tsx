@@ -1,3 +1,5 @@
+import * as setOutbox from "../../sync/setLogOutbox";
+import { entry as queuedEntry } from "../../sync/outboxTestFixture";
 import { onlineManager } from "@tanstack/react-query";
 import React from "react";
 import { act, configure, fireEvent, render, screen } from "@testing-library/react";
@@ -147,6 +149,23 @@ function runningRestEntry(segmentId: string) {
 }
 
 describe("SegmentCard", () => {
+  it("restores queued ticks and latest values without a server row while offline", async () => {
+    await setOutbox.clear("queued-user");
+    await setOutbox.enqueue("queued-user", [queuedEntry({ key: "day-1:seg-1:ex-1:1", programDayId: "day-1", workoutSegmentId: "seg-1", row: { ...queuedEntry().row, programExerciseId: "ex-1", weightKg: 72 } })]);
+    await setOutbox.enqueue("queued-user", [queuedEntry({ key: "day-1:seg-1:ex-1:4", programDayId: "day-1", workoutSegmentId: "seg-1", row: { ...queuedEntry().row, programExerciseId: "ex-1", orderIndex: 4, weightKg: 88 } })]);
+    onlineManager.setOnline(false);
+    try {
+      renderCard({ userId: "queued-user" });
+      fireEvent.click(screen.getByText("Start Exercise"));
+      await waitForSlow(() => expect(screen.getByRole("button", { name: "Barbell Squat set 1 waiting for connection" }).querySelector('[data-icon="cloud-offline-outline"]')).toBeInTheDocument());
+      expect(screen.getByText("Saved on this phone. Will sync when you're back online.")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("72")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Barbell Squat set 4 waiting for connection" })).toBeInTheDocument();
+      expect(mutateAsyncMock).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByDisplayValue("72"), { target: { value: "75" } });
+      await waitForSlow(async () => expect((await setOutbox.list("queued-user"))[0].row.weightKg).toBe(75));
+    } finally { onlineManager.setOnline(true); await setOutbox.clear("queued-user"); }
+  });
   beforeEach(() => {
     existingLogRows = [];
     _resetForTest();
@@ -230,7 +249,7 @@ describe("SegmentCard", () => {
       expect(screen.getByText("Not saved. Tap the set to retry.")).toBeInTheDocument();
       expect(counts).not.toHaveBeenCalledWith(expect.anything(), 1);
       expect(allSaved).not.toHaveBeenCalled();
-      expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 1);
+      expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 1, expect.any(Array));
     });
   }
   it("save regression: log-all failure leaves every row unsaved", async () => {
@@ -241,7 +260,7 @@ describe("SegmentCard", () => {
     fireEvent.click(await screen.findByText("Log all sets as complete"));
     expect((await screen.findAllByRole("button", { name: /not saved. Double-tap to retry/ })).length).toBe(3);
     expect(allSaved).not.toHaveBeenCalled();
-    expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 3);
+    expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 3, expect.any(Array));
   });
   it("retries a failed set with its original row, then counts it only after success", async () => {
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
@@ -254,7 +273,7 @@ describe("SegmentCard", () => {
     fireEvent.click(retry);
     await waitForSlow(() => expect(counts).toHaveBeenLastCalledWith("seg-1", 1));
     expect(mutateAsyncMock).toHaveBeenLastCalledWith(original);
-    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0, []));
   });
   it("shows saving and prevents a second send while the request is pending", async () => {
     let resolve!: (value: any) => void;
@@ -277,7 +296,7 @@ describe("SegmentCard", () => {
       fireEvent.click(screen.getByText("Start Exercise"));
       fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
       expect(await screen.findByRole("button", { name: "Barbell Squat set 1 waiting for connection" })).toBeInTheDocument();
-      expect(screen.getByText("Will save when you're back online")).toBeInTheDocument();
+      expect(screen.getByText("Saved on this phone. Will sync when you're back online.")).toBeInTheDocument();
       await act(async () => { onlineManager.setOnline(true); resolve({ saved: 1, prs: [] }); });
       expect(screen.getByRole("button", { name: "Barbell Squat set 1 complete" })).toBeInTheDocument();
     } finally { onlineManager.setOnline(true); }
@@ -317,7 +336,7 @@ describe("SegmentCard", () => {
     if (batch) fireEvent.click(await screen.findByText("Log all sets as complete"));
     else fireEvent.click(await screen.findByRole("button", { name: "Barbell Squat set 1 complete" }));
     await waitForSlow(() => expect(subscription).toHaveBeenCalledTimes(1));
-    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0, []));
     expect(screen.queryByRole("button", { name: /set \d+ saving/ })).not.toBeInTheDocument();
   });
   it("a screen retry request retries failed rows with current inputs", async () => {
@@ -1274,7 +1293,7 @@ describe("SegmentCard — round-based logging (superset)", () => {
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(402, "subscription"));
     fireEvent.click(await screen.findByText("Done"));
     await waitForSlow(() => expect(subscription).toHaveBeenCalledTimes(1));
-    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith("seg-1", 0, []));
     expect(complete).not.toHaveBeenCalled();
     expect(screen.getByText("Done")).toBeInTheDocument();
   });

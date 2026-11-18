@@ -1,4 +1,5 @@
 import { useVersionGate } from "./src/lib/useVersionGate";
+import { useSetLogOutboxSync } from "./src/sync/useSetLogOutboxSync";
 import { isStartupReady, maybeShowSoftUpdate, selectRootView } from "./src/lib/versionGatePresentation";
 import { ForceUpdateScreen } from "./src/components/session/ForceUpdateScreen";
 import { clearDisabledPhysiqueUpload } from "./src/utils/physiqueStartup";
@@ -89,6 +90,7 @@ const {
 function App(): React.JSX.Element {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const userId = useSessionStore((state) => state.userId);
+  useSetLogOutboxSync(isAuthenticated, userId, queryClient);
   const entryRoute = useSessionStore((state) => state.entryRoute);
   const initialTab = useSessionStore((state) => state.initialTab);
 

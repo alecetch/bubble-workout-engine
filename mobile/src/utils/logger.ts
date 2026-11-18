@@ -22,7 +22,7 @@ function emit(level: LogLevel, scope: string, message: string, detail?: unknown)
 
 export const logger = {
   boot: (message: string, detail?: unknown) => emit("log", "boot", message, detail),
-  api: (message: string, detail?: unknown) => emit("log", "api", message, detail),
+  api: (message: string, detail?: unknown) => emit(message.startsWith("set-outbox-") ? "warn" : "log", "api", message, detail),
   warn: (scope: string, message: string, detail?: unknown) => emit("warn", scope, message, detail),
   error: (scope: string, message: string, detail?: unknown) => emit("error", scope, message, detail),
 };
