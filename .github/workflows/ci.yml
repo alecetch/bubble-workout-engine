@@ -385,8 +385,8 @@ jobs:
       ONBOARDING2_TEST_EMAIL: onboarding-intermediate-ci@example.com
       S3_ENDPOINT: http://127.0.0.1:9000
       S3_REGION: us-east-1
-      S3_ACCESS_KEY_ID: e2e-minio-user
-      S3_SECRET_ACCESS_KEY: e2e-minio-password-ci-only
+      S3_ACCESS_KEY_ID: e2e-storage-user
+      S3_SECRET_ACCESS_KEY: e2e-storage-password-ci-only
       S3_PHYSIQUE_BUCKET: physique-photos
 
     steps:
@@ -445,11 +445,9 @@ jobs:
       - name: Start E2E photo storage
         working-directory: api
         run: |
-          docker run --detach --name e2e-photo-storage -p 9000:9000 \
-            -e MINIO_ROOT_USER="$S3_ACCESS_KEY_ID" \
-            -e MINIO_ROOT_PASSWORD="$S3_SECRET_ACCESS_KEY" \
-            minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e server /data
-          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --retry-max-time 60 --max-time 2 http://127.0.0.1:9000/minio/health/ready
+          docker run --detach --name e2e-photo-storage -p 9000:5000 \
+            motoserver/moto@sha256:8860b18917e1ee4d067df19a406ae95dc26037e6965d5b499e1cffd33755b914
+          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --retry-max-time 60 --max-time 2 http://127.0.0.1:9000/
           node --input-type=module <<'NODE'
           import { CreateBucketCommand } from '@aws-sdk/client-s3';
           import { getClientForBucket, PHYSIQUE_BUCKET } from './src/services/s3Service.js';
