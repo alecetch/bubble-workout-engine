@@ -38,3 +38,20 @@ test("overlapping and stopped ticks skip", async t => {
   resolve(); await first; assert.equal(f.runs, 2); assert.equal(f.releases, 1);
   f.scheduler.stop(); await f.scheduler.tick(); assert.equal(f.runs, 2);
 });
+
+for (const scenario of ["locked", "busy", "error"]) test(`heartbeat: ${scenario} run`, async t => {
+  const heartbeats = [], results = []; let releases = 0;
+  const db = { async connect() { return { async query(sql) {
+    if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: scenario !== "busy" }] };
+    if (scenario === "error" && sql.startsWith("SELECT *")) throw Error("run failed");
+    return { rows: [] };
+  }, release() { releases++; } }; }, async query() {
+    if (scenario === "error") throw Error("run failed"); return { rows: [] };
+  } };
+  const heartbeat = async (options, fn) => { heartbeats.push(options); try { const result = await fn(); results.push("ok"); return result; } catch (error) { results.push("error"); throw error; } };
+  const job = startWorkoutReminderScheduler({ db, notificationService: { send() {} }, heartbeat, intervalMs: 900000 });
+  t.after(job.stop); await job.tick();
+  assert.equal(heartbeats.length, scenario === "busy" ? 0 : 1);
+  assert.deepEqual(results, scenario === "busy" ? [] : [scenario === "error" ? "error" : "ok"]);
+  assert.equal(releases, 1);
+});

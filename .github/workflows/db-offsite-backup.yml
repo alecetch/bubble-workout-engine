@@ -1,0 +1,151 @@
+name: Encrypted off-site database backup
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offsite-database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          OFFSITE_ACCESS_KEY_ID: ${{ secrets.OFFSITE_ACCESS_KEY_ID }}
+          OFFSITE_SECRET_ACCESS_KEY: ${{ secrets.OFFSITE_SECRET_ACCESS_KEY }}
+          OFFSITE_BUCKET: ${{ vars.OFFSITE_BUCKET }}
+          OFFSITE_ENDPOINT: ${{ vars.OFFSITE_ENDPOINT }}
+          AGE_PUBLIC_KEY: ${{ vars.AGE_PUBLIC_KEY }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FLY_MPG_CLUSTER_ID: ${{ vars.FLY_MPG_CLUSTER_ID }}
+        run: |
+          set -euo pipefail
+          for name in OFFSITE_ACCESS_KEY_ID OFFSITE_SECRET_ACCESS_KEY OFFSITE_BUCKET OFFSITE_ENDPOINT AGE_PUBLIC_KEY FLY_API_TOKEN DATABASE_URL FLY_MPG_CLUSTER_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Off-site backup not configured; skipping"
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup Flyctl
+        if: steps.config.outputs.enabled == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Start Fly MPG proxy
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_MPG_CLUSTER_ID: ${{ vars.FLY_MPG_CLUSTER_ID }}
+        run: |
+          set -euo pipefail
+          flyctl mpg proxy "$FLY_MPG_CLUSTER_ID" --local-port 15432 > "$RUNNER_TEMP/fly-mpg-proxy.log" 2>&1 &
+          echo "PROXY_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 15); do
+            if nc -z 127.0.0.1 15432 2>/dev/null; then echo "Proxy ready after ${i}s"; break; fi
+            sleep 1
+          done
+          nc -z 127.0.0.1 15432 2>/dev/null || { echo "ERROR: MPG proxy did not start within 15s"; cat "$RUNNER_TEMP/fly-mpg-proxy.log"; exit 1; }
+
+      - name: Prepare masked proxy URL
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          try {
+            const url = new URL(process.env.DATABASE_URL);
+            url.hostname = '127.0.0.1';
+            url.port = '15432';
+            url.searchParams.set('sslmode', 'disable');
+            const value = url.toString();
+            console.log(`::add-mask::${value}`);
+            appendFileSync(process.env.GITHUB_ENV, `PROXY_URL=${value}\n`);
+          } catch { console.error('Invalid database URL configuration'); process.exitCode = 1; }
+          NODE
+
+      - name: Install matching Postgres client and encryption tools
+        if: steps.config.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client age
+          server_num=$(psql "$PROXY_URL" -Atc 'SHOW server_version_num')
+          [[ "$server_num" =~ ^[0-9]+$ ]] || { echo "Invalid server version"; exit 1; }
+          major=$((server_num / 10000))
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y "postgresql-client-$major"
+          echo "PG_BIN=/usr/lib/postgresql/$major/bin" >> "$GITHUB_ENV"
+
+      - name: Dump, encrypt and erase plaintext
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          AGE_PUBLIC_KEY: ${{ vars.AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          plain="$RUNNER_TEMP/backup.dump"
+          encrypted="$RUNNER_TEMP/backup.dump.age"
+          trap 'if [[ -f "$plain" ]]; then shred -u "$plain"; fi' EXIT
+          "$PG_BIN/pg_dump" --dbname="$PROXY_URL" --format=custom --no-owner --no-privileges --file="$plain"
+          age -r "$AGE_PUBLIC_KEY" -o "$encrypted" "$plain"
+          shred -u "$plain"
+          [[ $(stat -c%s "$encrypted") -ge 1048576 ]] || { echo "Encrypted backup is unexpectedly small"; exit 1; }
+
+      - name: Upload encrypted backup
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.OFFSITE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OFFSITE_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          OFFSITE_BUCKET: ${{ vars.OFFSITE_BUCKET }}
+          OFFSITE_ENDPOINT: ${{ vars.OFFSITE_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "$RUNNER_TEMP/backup.dump.age" "s3://$OFFSITE_BUCKET/weekly/$(date -u +%F).dump.age" --endpoint-url "$OFFSITE_ENDPOINT" --only-show-errors
+
+      - name: Send backup heartbeat
+        if: steps.config.outputs.enabled == 'true' && vars.OFFSITE_BACKUP_HEARTBEAT_URL != ''
+        env:
+          HEARTBEAT_URL: ${{ vars.OFFSITE_BACKUP_HEARTBEAT_URL }}
+        run: |
+          set -euo pipefail
+          curl -fsS -m 10 "$HEARTBEAT_URL" >/dev/null
+
+      - name: Clean up runner files and proxy
+        if: always() && steps.config.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/backup.dump" ]]; then shred -u "$RUNNER_TEMP/backup.dump"; fi
+          rm -f "$RUNNER_TEMP/backup.dump.age"
+          if [[ -n "${PROXY_PID:-}" ]]; then kill "$PROXY_PID" 2>/dev/null || true; fi

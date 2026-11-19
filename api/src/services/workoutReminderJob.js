@@ -1,3 +1,4 @@
+import { withJobHeartbeat } from "../utils/jobHeartbeat.js";
 import { makeNotificationService } from "./notificationService.js";
 import { choosePaceMessage, dailyReminderBody } from "./paceMessages.js";
 import { reminderCalendar, reminderYearProgress } from "./reminderYearProgress.js";
@@ -81,7 +82,7 @@ export function shouldStartReminderScheduler(env = process.env) {
 
 export function startWorkoutReminderScheduler({ db, notificationService = makeNotificationService(db),
   intervalMs = Number(process.env.REMINDER_SCHEDULER_INTERVAL_MS) || 300000,
-  logger, now = () => new Date() }) {
+  logger, now = () => new Date(), heartbeat = withJobHeartbeat }) {
   let running = false;
   let stopped = false;
   async function tick() {
@@ -95,10 +96,14 @@ export function startWorkoutReminderScheduler({ db, notificationService = makeNo
       const result = await client.query("SELECT pg_try_advisory_lock(hashtext('workout-reminders')::bigint) AS locked");
       locked = result.rows[0]?.locked === true;
       if (!locked) return;
-      const counts = await runWorkoutReminders(db, notificationService, { now,
-        log: (...args) => logger?.warn?.(...args),
+      await heartbeat({ monitorSlug: process.env.SENTRY_REMINDER_MONITOR_SLUG,
+        pingUrl: process.env.REMINDER_JOB_HEARTBEAT_URL, schedule: "*/5 * * * *",
+        checkinMarginMinutes: 10, maxRuntimeMinutes: 4, log: logger }, async () => {
+        const counts = await runWorkoutReminders(db, notificationService, { now,
+          log: (...args) => logger?.warn?.(...args),
+        });
+        logger?.info?.({ event: "notification.reminder.run", ...counts, duration_ms: Date.now() - started });
       });
-      logger?.info?.({ event: "notification.reminder.run", ...counts, duration_ms: Date.now() - started });
     } catch (err) {
       logger?.error?.({ event: "notification.reminder.run_error", err: err?.message });
     } finally {
