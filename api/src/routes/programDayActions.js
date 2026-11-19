@@ -10,7 +10,8 @@ import { VALID_FOCUS_SLUGS } from "../utils/splitRecommender.js";
 
 export const programDayActionsRouter = express.Router();
 
-const substitutionJobs = new Map();
+const SUBSTITUTION_ERROR = "Something went wrong updating your program. Nothing was changed.";
+const STALE_SUBSTITUTION_ERROR = "This update didn't finish. Nothing was changed.";
 
 function mapError(err) {
   if (err instanceof RequestValidationError) {
@@ -121,7 +122,7 @@ async function verifyProgram(db, { programId, userId }) {
   return result.rowCount > 0;
 }
 
-function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
+function createProgramDayActionHandlers(db = pool) {
   async function skipProgramDay(req, res) {
     const { request_id } = req;
     try {
@@ -353,19 +354,23 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
       const injuryFlags = normalizeInjuryFlags(profile.injury_flags);
 
       const jobId = randomUUID();
-      jobs.set(jobId, {
-        programId,
-        userId,
-        status: "running",
-        warnings: [],
-        error: null,
-        swappedCount: 0,
-        unsubstitutedExerciseIds: [],
-      });
-
-      setImmediate(async () => {
-        try {
-          const exercisesResult = await db.query(
+      const startedAt = Date.now();
+      await db.query(`INSERT INTO equipment_substitution_job (id, program_id, user_id, status) VALUES ($1, $2, $3, 'running')`, [jobId, programId, userId]);
+      try {
+        await db.query("DELETE FROM equipment_substitution_job WHERE created_at < now() - interval '30 days'");
+      } catch (err) {
+        req.log?.error({ err, request_id, event: "equipment_substitution.retention_failed" });
+      }
+      let client;
+      let exerciseCount = 0;
+      let committing = false;
+      let result = { status: "failed", swappedCount: 0, warnings: [], unsubstitutedExerciseIds: [], error: SUBSTITUTION_ERROR };
+      try {
+        client = await db.connect();
+        await client.query("BEGIN");
+        await client.query("SET LOCAL statement_timeout = '20s'");
+        await client.query("SELECT id FROM program WHERE id = $1 FOR UPDATE", [programId]);
+          const exercisesResult = await client.query(
             `
             SELECT
               pe.id,
@@ -383,6 +388,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
             [programId],
           );
 
+          exerciseCount = exercisesResult.rows.length;
           const warnings = [];
           let swappedCount = 0;
           for (const row of exercisesResult.rows ?? []) {
@@ -392,7 +398,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
               .filter(Boolean);
             const compatible = required.length === 0 || required.every((item) => availableEquipmentCodes.includes(item));
             if (!compatible) {
-              const candidateResult = await db.query(
+              const candidateResult = await client.query(
                 `
                 SELECT
                   replacement.exercise_id,
@@ -445,7 +451,7 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
                 continue;
               }
 
-              await db.query(
+              await client.query(
                 `
                 UPDATE program_exercise
                 SET
@@ -488,29 +494,41 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
             }
           }
 
-          jobs.set(jobId, {
-            programId,
-            userId,
-            status: warnings.length > 0 ? "partial" : "complete",
-            warnings,
-            error: null,
-            swappedCount,
-            unsubstitutedExerciseIds: warnings.map((warning) => warning.exerciseId),
-          });
-        } catch (bgErr) {
-          jobs.set(jobId, {
-            programId,
-            userId,
-            status: "failed",
-            warnings: [],
-            error: bgErr?.message ?? "Unknown error",
-            swappedCount: 0,
-            unsubstitutedExerciseIds: [],
-          });
+          // Persist the final result in the same commit as the swaps, so a lost
+          // connection after COMMIT cannot turn an applied update into a failure.
+          result = { status: warnings.length > 0 ? "partial" : "complete", warnings,
+            error: null, swappedCount, unsubstitutedExerciseIds: warnings.map(warning => warning.exerciseId) };
+          await client.query(`UPDATE equipment_substitution_job SET status = $2, swapped_count = $3,
+            warnings_json = $4::jsonb, finished_at = now() WHERE id = $1`,
+            [jobId, result.status, swappedCount, JSON.stringify(warnings)]);
+          committing = true;
+          await client.query("COMMIT");
+      } catch (err) {
+        if (client) {
+          try { await client.query("ROLLBACK"); } catch (rollbackErr) {
+            req.log?.error({ err: rollbackErr, request_id, event: "equipment_substitution.rollback_failed" });
+          } finally {
+            client.release();
+            client = null;
+          }
         }
-      });
-
-      return res.status(202).json({ ok: true, jobId });
+        result = { status: "failed", swappedCount: 0, warnings: [], unsubstitutedExerciseIds: [], error: SUBSTITUTION_ERROR };
+        await db.query(`UPDATE equipment_substitution_job SET status = 'failed', error_code = $2,
+          finished_at = now() WHERE id = $1 AND status = 'running'`, [jobId, err.code === "57014" ? "timeout" : "internal_error"]);
+        if (committing) {
+          const persisted = (await db.query("SELECT * FROM equipment_substitution_job WHERE id = $1", [jobId])).rows[0];
+          if (persisted && persisted.status !== "failed" && persisted.status !== "running") {
+            result = { status: persisted.status, swappedCount: persisted.swapped_count, warnings: persisted.warnings_json,
+              unsubstitutedExerciseIds: persisted.warnings_json.map(warning => warning.exerciseId), error: null };
+          }
+        }
+        req.log?.error({ err, request_id, event: "equipment_substitution.failed" });
+      } finally {
+        client?.release();
+      }
+      req.log?.info({ event: "equipment_substitution.complete", duration_ms: Date.now() - startedAt,
+        exercise_count: exerciseCount, swapped_count: result.swappedCount, status: result.status });
+      return res.status(202).json({ ok: true, jobId, ...result });
     } catch (err) {
       const mapped = mapError(err);
       return res.status(mapped.status).json({
@@ -529,20 +547,30 @@ function createProgramDayActionHandlers(db = pool, jobs = substitutionJobs) {
       const userId = resolveUserId(req);
       const programId = requireUuid(req.params.programId, "programId");
       const jobId = safeString(req.params.jobId);
-      const job = jobs.get(jobId);
-      if (!job || job.programId !== programId) {
+      try { requireUuid(jobId, "jobId"); } catch {
         return res.status(404).json({ ok: false, request_id, code: "not_found", error: "Job not found" });
       }
-      if (String(job.userId) !== String(userId)) {
+      const jobResult = await db.query(`SELECT *, created_at < now() - interval '2 minutes' AS stale
+        FROM equipment_substitution_job WHERE id = $1 AND program_id = $2`, [jobId, programId]);
+      let job = jobResult.rows[0];
+      if (!job) {
+        return res.status(404).json({ ok: false, request_id, code: "not_found", error: "Job not found" });
+      }
+      if (String(job.user_id) !== String(userId)) {
         return res.status(403).json({ ok: false, request_id, code: "forbidden", error: "Job does not belong to this user" });
+      }
+      if (job.status === "running" && job.stale) {
+        const updated = await db.query(`UPDATE equipment_substitution_job SET status = 'failed', error_code = 'stale',
+          finished_at = now() WHERE id = $1 AND status = 'running' RETURNING *`, [jobId]);
+        job = updated.rows[0] ?? (await db.query("SELECT * FROM equipment_substitution_job WHERE id = $1", [jobId])).rows[0];
       }
       return res.json({
         ok: true,
         status: job.status,
-        warnings: job.warnings ?? [],
-        error: job.error ?? null,
-        swappedCount: job.swappedCount ?? 0,
-        unsubstitutedExerciseIds: job.unsubstitutedExerciseIds ?? [],
+        warnings: job.warnings_json ?? [],
+        error: job.status === "failed" ? (job.error_code === "stale" ? STALE_SUBSTITUTION_ERROR : SUBSTITUTION_ERROR) : null,
+        swappedCount: job.swapped_count ?? 0,
+        unsubstitutedExerciseIds: (job.warnings_json ?? []).map(warning => warning.exerciseId),
       });
     } catch (err) {
       const mapped = mapError(err);
@@ -642,82 +670,5 @@ programDayActionsRouter.post("/programs/:programId/days/:programDayId/reschedule
 programDayActionsRouter.post("/programs/:programId/equipment-substitution", handlers.startEquipmentSubstitution);
 programDayActionsRouter.get("/programs/:programId/equipment-substitution/:jobId", handlers.pollEquipmentSubstitution);
 programDayActionsRouter.patch("/programs/:programId/split", handlers.updateProgramSplit);
-
-// PATCH /api/programs/:programId/split
-// Updates focus_type on all unstarted days using the user's new preferred split.
-programDayActionsRouter.patch("/programs/:programId/split", async (req, res) => {
-  const { request_id } = req;
-  try {
-    const userId = resolveUserId(req);
-    const programId = requireUuid(req.params.programId, "programId");
-    const dayFocuses = req.body?.day_focuses;
-
-    if (!Array.isArray(dayFocuses) || dayFocuses.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        request_id,
-        code: "validation_error",
-        error: "day_focuses must be a non-empty array",
-      });
-    }
-
-    // Verify program exists and belongs to user.
-    const progResult = await pool.query(
-      "SELECT user_id FROM program WHERE id = $1",
-      [programId],
-    );
-    if (progResult.rowCount === 0) {
-      return res.status(404).json({
-        ok: false,
-        request_id,
-        code: "not_found",
-        error: "Program not found",
-      });
-    }
-    if (String(progResult.rows[0].user_id) !== String(userId)) {
-      return res.status(403).json({
-        ok: false,
-        request_id,
-        code: "forbidden",
-        error: "Program does not belong to this user",
-      });
-    }
-
-    // Fetch all unstarted days ordered by position.
-    const daysResult = await pool.query(
-      `SELECT id FROM program_day
-       WHERE program_id = $1 AND is_completed = FALSE AND is_skipped = FALSE
-       ORDER BY week_number ASC, day_number ASC`,
-      [programId],
-    );
-
-    if (daysResult.rowCount === 0) {
-      return res.status(200).json({ ok: true, request_id, updatedCount: 0 });
-    }
-
-    // Assign focus cyclically across the unstarted days.
-    const ids = daysResult.rows.map((row, i) => ({ id: row.id, focus: dayFocuses[i % dayFocuses.length] }));
-
-    // Bulk update using unnest.
-    await pool.query(
-      `UPDATE program_day pd
-       SET focus_type = u.focus
-       FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::text[]) AS focus) AS u
-       WHERE pd.id = u.id`,
-      [ids.map((u) => u.id), ids.map((u) => u.focus)],
-    );
-
-    return res.status(200).json({ ok: true, request_id, updatedCount: ids.length });
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-      details: mapped.details,
-    });
-  }
-});
 
 export { createProgramDayActionHandlers, validateFutureDate };

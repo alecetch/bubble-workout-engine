@@ -1,4 +1,6 @@
 import React from "react";
+import { Alert } from "react-native";
+import { startEquipmentSubstitution } from "../../api/programDayActions";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RecalibrateScreenB } from "./RecalibrateScreen";
@@ -26,6 +28,9 @@ const {
   navigationNavigateMock: vi.fn(),
   navigationGoBackMock: vi.fn(),
 }));
+
+const invalidateQueries = vi.fn().mockResolvedValue(undefined);
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries }) }));
 
 vi.mock("../../api/hooks", () => ({
   useMe: useMeMock,
@@ -115,7 +120,7 @@ vi.mock("../../components/onboarding/DayChipRow", () => ({
 }));
 
 vi.mock("../../components/onboarding/EquipmentCategorySection", () => ({
-  EquipmentCategorySection: () => null,
+  EquipmentCategorySection: ({ onToggleItem }: any) => <button onClick={() => onToggleItem("dumbbells")}>Toggle dumbbells</button>,
 }));
 
 vi.mock("../../components/onboarding/MultilineField", () => ({
@@ -211,6 +216,30 @@ describe("RecalibrateScreenB", () => {
     navigationNavigateMock.mockReset();
     navigationGoBackMock.mockReset();
   });
+  for (const status of ["complete", "partial", "failed", undefined] as const) {
+    it(`handles substitution POST status ${status ?? "missing"}`, async () => {
+      useClientProfileMock.mockReturnValue({ data: { ...profile, equipmentPreset: null } });
+      vi.mocked(startEquipmentSubstitution).mockReset();
+      useReferenceDataMock.mockReturnValue({ data: { equipmentItems: [{ code: "dumbbells", label: "Dumbbells" }] } });
+      invalidateQueries.mockClear();
+      const alert = vi.spyOn(Alert, "alert").mockImplementation(() => {});
+      vi.mocked(startEquipmentSubstitution).mockResolvedValueOnce({ jobId: "job-1", status, swappedCount: 2,
+        unsubstitutedExerciseIds: ["missing"], error: "Nothing was changed." });
+      renderScreen(["equipment"]);
+      fireEvent.click(await screen.findByRole("button", { name: "Toggle dumbbells" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() => expect(status === "failed" ? alert : navigationNavigateMock).toHaveBeenCalled());
+      if (status === "failed") {
+        expect(alert).toHaveBeenCalledWith("Update failed", "Nothing was changed.");
+        expect(navigationNavigateMock).not.toHaveBeenCalled();
+      } else if (status) {
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["programOverview"] });
+        expect(navigationNavigateMock).toHaveBeenCalledWith("ProgramDashboard", { programId: "program-1" });
+        if (status === "partial") expect(alert).toHaveBeenCalledWith("Program updated", "2 exercises swapped. 1 could not be substituted.");
+      } else expect(navigationNavigateMock).toHaveBeenCalledWith("SubstitutionProgress", { programId: "program-1", jobId: "job-1" });
+      alert.mockRestore();
+    });
+  }
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});
