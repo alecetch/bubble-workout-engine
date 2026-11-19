@@ -35,7 +35,7 @@ async function fixture(fn) {
     syncUserEntitlement: async () => { calls.push(['sync']); },
     notificationService: { send: async args => { calls.push(['push', args]); return { sent: true }; } },
   };
-  const run = () => runReferralRewards(pool, deps, { now: () => now, log: x => logs.push(x) });
+  const run = () => runReferralRewards(pool, deps, { now: () => now, log: x => logs.push(x), heartbeat: async (_options, fn) => fn() });
   const read = async () => (await pool.query('SELECT * FROM referral_conversion WHERE id=$1', [row.id])).rows[0];
   try { await fn({ row, referrer, deps, calls, run, read, addRow, logs }); }
   finally { await pool.query('DELETE FROM app_user WHERE id = ANY($1::uuid[])', [ids]); }

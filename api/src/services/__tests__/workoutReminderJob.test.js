@@ -6,7 +6,7 @@ function fixture({ locked = true, error = false, pending } = {}) {
   const client = { async query(sql) { queries.push(sql); return { rows: [{ locked }] }; }, release() { releases++; } };
   const db = { async connect() { return client; }, async query() { runs++; if (pending) await pending; if (error) throw Error("query failed"); return { rows: [] }; } };
   const logger = { info: log => logs.push(log), error: log => logs.push(log) };
-  const scheduler = startWorkoutReminderScheduler({ db, notificationService: { send() { throw Error("unexpected send"); } }, logger, intervalMs: 3600000 });
+  const scheduler = startWorkoutReminderScheduler({ db, notificationService: { send() { throw Error("unexpected send"); } }, logger, intervalMs: 3600000, heartbeat: async (_options, fn) => fn() });
   return { scheduler, queries, logs, get releases() { return releases; }, get runs() { return runs; } };
 }
 test("scheduler flag requires exactly true", () => {
