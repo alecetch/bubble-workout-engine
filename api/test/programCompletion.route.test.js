@@ -1,3 +1,10 @@
+import express from "express";
+import jwt from "jsonwebtoken";
+import { pool, skip as databaseSkip, withAuthUser } from "../testSupport/authHardeningFixtures.js";
+import { trainingProgram } from "../testSupport/trainingFixtures.js";
+import { offsetLocalDate, localDateInZone } from "../src/services/trainingYear.js";
+import { makeRequireAuth } from "../src/middleware/requireAuth.js";
+test.after(() => pool.end());
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -26,6 +33,7 @@ function mockDb(responses) {
   let i = 0;
   return {
     async query(_sql, _params) {
+      if (_sql.includes("SELECT cp.onboarding_completed_at")) return { rows: [{ timezone: "UTC" }] };
       const response = responses[i++];
       if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
       if (response instanceof Error) throw response;
@@ -94,6 +102,7 @@ test("toEndCheckPayload derives can_complete_with_skips only at end of block", (
       skipped_workouts_count: 0,
       is_last_scheduled_day_complete: true,
       can_complete_with_skips: true,
+      last_scheduled_date: null, schedule_ended: false, days_since_last_session: null,
     },
   );
 });
@@ -372,6 +381,7 @@ test("completeProgram accepts with_skips after the final scheduled day is comple
   const calls = [];
   const handlers = createProgramCompletionHandlers({
     async query(sql, params) {
+      if (sql.includes("SELECT cp.onboarding_completed_at")) return { rows: [{ timezone: "UTC" }] };
       calls.push({ sql, params });
       if (calls.length === 1) {
         return {
@@ -458,6 +468,7 @@ test("completionSummary returns highest positive personal record", async () => {
   const calls = [];
   const handlers = createProgramCompletionHandlers({
     async query(sql, params) {
+      if (sql.includes("SELECT cp.onboarding_completed_at")) return { rows: [{ timezone: "UTC" }] };
       calls.push({ sql, params });
       if (calls.length === 1) {
         return {
@@ -540,3 +551,109 @@ test("completionSummary returns 400 when auth context is missing", async () => {
   assert.equal(res.statusCode, 400);
   assert.equal(res.body?.code, "validation_error");
 });
+
+async function lapseFixture(fn, { finalOffset = -3, completed = [0], lastSessionOffset = -5 } = {}) {
+  return withAuthUser(async user => {
+    await pool.query("UPDATE app_user SET timezone='UTC' WHERE id=$1", [user.id]);
+    await pool.query("INSERT INTO client_profile(user_id, fitness_rank) VALUES ($1,1)", [user.id]);
+    const program = await trainingProgram(pool, user.id);
+    await pool.query("UPDATE program SET program_type='strength' WHERE id=$1", [program.id]);
+    const today = localDateInZone(new Date(), "UTC");
+    for (let index = 0; index < program.days.length; index++) {
+      await pool.query(`INSERT INTO program_calendar_day(program_id, program_week_id, program_day_id, week_number,
+        scheduled_offset_days, scheduled_weekday, scheduled_date, global_day_index, program_day_key, user_id)
+        SELECT program_id, program_week_id, id, 1, $2, 'mon', $3, global_day_index, program_day_key, $4
+        FROM program_day WHERE id=$1`, [program.days[index], index, offsetLocalDate(today, finalOffset - 2 + index), user.id]);
+      await pool.query("UPDATE program_day SET is_completed=$2 WHERE id=$1", [program.days[index], completed.includes(index)]);
+    }
+    if (lastSessionOffset !== null) await pool.query(`INSERT INTO training_session(user_id,program_day_id,local_date,source)
+      VALUES ($1,$2,$3,'program_day')`, [user.id, program.days[0], offsetLocalDate(today, lastSessionOffset)]);
+    const handlers = createProgramCompletionHandlers(pool);
+    const call = async (method, { query = {}, body = {}, owner = user.id } = {}) => {
+      const res = mockRes(); await handlers[method]({ params: { program_id: program.id }, auth: { user_id: owner }, query, body }, res); return res;
+    };
+    await fn({ ...user, program, today, call, handlers });
+  });
+}
+
+test("ended schedule includes the incomplete final session and closes with skips", { skip: databaseSkip }, () => lapseFixture(async f => {
+  const check = await f.call("endCheck"); assert.equal(check.statusCode, 200);
+  assert.equal(check.body.schedule_ended, true); assert.equal(check.body.can_complete_with_skips, true);
+  assert.equal(check.body.last_scheduled_date, offsetLocalDate(f.today, -3)); assert.equal(check.body.missed_workouts_count, 2);
+  assert.equal(check.body.days_since_last_session, 5);
+  const result = await f.call("completeProgram", { body: { mode: "with_skips", local_date: f.today } });
+  assert.equal(result.statusCode, 200);
+  const row = (await pool.query("SELECT status,completed_mode,is_primary FROM program WHERE id=$1", [f.program.id])).rows[0];
+  assert.deepEqual(row, { status: "completed", completed_mode: "with_skips", is_primary: false });
+  assert.equal((await f.call("endCheck")).body.can_complete_with_skips, false);
+}));
+for (const finalOffset of [-1, 0, 2]) test(`final date offset ${finalOffset} retains the original completion guard`, { skip: databaseSkip }, () => lapseFixture(async f => {
+  const check = await f.call("endCheck"); assert.equal(check.body.schedule_ended, false); assert.equal(check.body.can_complete_with_skips, false);
+  assert.equal(check.body.missed_workouts_count, 1);
+  assert.equal((await f.call("completeProgram", { body: { mode: "with_skips" } })).statusCode, 400);
+}, { finalOffset }));
+test("second day after the final date is the first ended day", { skip: databaseSkip }, () => lapseFixture(async f => {
+  assert.equal((await f.call("endCheck")).body.schedule_ended, true);
+}, { finalOffset: -2 }));
+test("completed final session still permits skips inside the schedule", { skip: databaseSkip }, () => lapseFixture(async f => {
+  const check = await f.call("endCheck"); assert.equal(check.body.schedule_ended, false); assert.equal(check.body.can_complete_with_skips, true);
+  assert.equal((await f.call("completeProgram", { body: { mode: "with_skips" } })).statusCode, 200);
+}, { finalOffset: 1, completed: [2] }));
+test("fully complete block uses as_scheduled and already-completed requests remain idempotent", { skip: databaseSkip }, () => lapseFixture(async f => {
+  assert.equal((await f.call("endCheck")).body.can_complete_with_skips, false);
+  assert.equal((await f.call("completeProgram", { body: { mode: "as_scheduled" } })).statusCode, 200);
+  const again = await f.call("completeProgram", { body: { mode: "with_skips" } });
+  assert.equal(again.statusCode, 200); assert.equal(again.body.completed_mode, "as_scheduled");
+}, { completed: [0, 1, 2] }));
+test("rescheduled dates and skipped future sessions determine the actual schedule end", { skip: databaseSkip }, () => lapseFixture(async f => {
+  const newDate = offsetLocalDate(f.today, 4);
+  await pool.query("UPDATE program_calendar_day SET scheduled_date=$2 WHERE program_day_id=$1", [f.program.days[2], newDate]);
+  const check = await f.call("endCheck"); assert.equal(check.body.last_scheduled_date, newDate); assert.equal(check.body.schedule_ended, false);
+  await pool.query("UPDATE program_day SET is_skipped=true WHERE id=$1", [f.program.days[2]]);
+  const skipped = await f.call("endCheck"); assert.equal(skipped.body.schedule_ended, true);
+  assert.equal(skipped.body.last_scheduled_date, offsetLocalDate(f.today, -4)); assert.equal(skipped.body.missed_workouts_count, 1);
+}));
+for (const offset of [1, -3]) test(`all three completion routes validate local_date offset ${offset}`, { skip: databaseSkip }, () => lapseFixture(async f => {
+  const local_date = offsetLocalDate(f.today, offset);
+  for (const method of ["endCheck", "completionSummary", "completeProgram"]) {
+    const result = await f.call(method, { query: { local_date }, body: { mode: "with_skips", local_date } });
+    assert.equal(result.statusCode, 400); assert.equal(result.body.code, "validation_error");
+  }
+}));
+test("omitted date uses the stored timezone and yesterday remains an accepted grace date", { skip: databaseSkip }, async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-05-01T23:30:00Z") });
+  await lapseFixture(async f => {
+    await pool.query("UPDATE app_user SET timezone='Pacific/Kiritimati' WHERE id=$1", [f.id]);
+    const check = await f.call("endCheck"); assert.equal(check.body.schedule_ended, true);
+    assert.equal((await f.call("endCheck", { query: { local_date: "2026-05-01" } })).body.schedule_ended, false);
+    assert.equal(check.body.days_since_last_session, 6);
+  }, { finalOffset: -1 });
+});
+for (const days of [5, 20, 21, 25, null]) test(`rank suggestion after ${days} days since a program session`, { skip: databaseSkip }, () => lapseFixture(async f => {
+  await pool.query(`INSERT INTO exercise_progression_state(user_id,program_type,exercise_id,progression_group_key,last_outcome,confidence)
+    VALUES ($1,'strength','bb_back_squat','lapse-test','increase_load','high')`, [f.id]);
+  await pool.query("INSERT INTO training_session(user_id,local_date,source,activity_type,duration_min) VALUES ($1,$2,'manual','run',30)", [f.id, f.today]);
+  const result = await f.call("completionSummary"); assert.equal(result.statusCode, 200);
+  const lapsed = days !== null && days >= 21;
+  assert.equal(result.body.lapsed, lapsed); assert.equal(result.body.days_since_last_session, days);
+  assert.equal(result.body.suggested_next_rank, lapsed ? 1 : 2);
+  assert.equal(result.body.re_enrollment_options.some(option => option.option === "progress_level"), !lapsed);
+}, { lastSessionOffset: days === null ? null : -days }));
+test("all three routes require auth and hide another user's program", { skip: databaseSkip }, () => lapseFixture(async f => {
+  const app = express(); app.use(express.json());
+  const secret = "program-lapse-test-secret";
+  app.use(makeRequireAuth(secret, "lapse-test", { getPasswordChangedAt: async () => null }));
+  app.get("/end-check", (req, res) => { req.params.program_id = f.program.id; return f.handlers.endCheck(req, res); });
+  app.get("/completion-summary", (req, res) => { req.params.program_id = f.program.id; return f.handlers.completionSummary(req, res); });
+  app.post("/complete", (req, res) => { req.params.program_id = f.program.id; return f.handlers.completeProgram(req, res); });
+  const server = app.listen(0); await new Promise(resolve => server.once("listening", resolve));
+  try {
+    const token = jwt.sign({}, secret, { subject: USER_UUID, issuer: "lapse-test" });
+    for (const path of ["end-check", "completion-summary", "complete"]) {
+      const options = { method: path === "complete" ? "POST" : "GET", headers: { "Content-Type": "application/json" }, ...(path === "complete" ? { body: JSON.stringify({ mode: "with_skips" }) } : {}) };
+      const url = `http://127.0.0.1:${server.address().port}/${path}`;
+      assert.equal((await fetch(url, options)).status, 401);
+      assert.equal((await fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } })).status, 404);
+    }
+  } finally { await new Promise(resolve => server.close(resolve)); }
+}));

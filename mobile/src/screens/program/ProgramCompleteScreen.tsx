@@ -283,6 +283,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
         ) : null}
 
         <View style={styles.section}>
+          {summary.lapsed ? <Text style={styles.subtitle}>Welcome back. We've kept your next block at the same level so you can ease back in.</Text> : null}
           <Text style={styles.sectionTitle}>Choose your next block</Text>
           {summary.reEnrollmentOptions.map((option) => {
             const isActive = selectedOption === option.option;

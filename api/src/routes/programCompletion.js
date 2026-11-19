@@ -1,3 +1,6 @@
+import { resolveLocalDate, userTrainingContext, ValidationError as LocalDateValidationError } from "../services/trainingDayLedger.js";
+import { localDateInZone, offsetLocalDate } from "../services/trainingYear.js";
+import { firstValidTimezone } from "../utils/timezone.js";
 import { normalizeInjuryFlags } from "../utils/injuryFlags.js";
 import { displayLabel } from "../utils/displayLabels.js";
 import express from "express";
@@ -43,6 +46,14 @@ SELECT
   cp.equipment_items_slugs,
   cp.equipment_preset_slug,
   cp.onboarding_step_completed,
+  (SELECT MAX(pcd.scheduled_date)::text FROM program_calendar_day pcd
+    JOIN program_day scheduled ON scheduled.id = pcd.program_day_id
+    WHERE pcd.program_id = p.id AND pcd.is_training_day = TRUE
+      AND scheduled.is_skipped IS NOT TRUE) AS last_scheduled_date,
+  (SELECT MAX(ts.local_date)::text FROM training_session ts
+    JOIN program_day trained ON trained.id = ts.program_day_id
+    WHERE trained.program_id = p.id AND ts.user_id = p.user_id) AS last_completed_session_date,
+  COUNT(pd.id) FILTER (WHERE pd.is_completed = FALSE AND pd.is_skipped IS NOT TRUE) AS incomplete_days,
   COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE) AS total_days,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
   COUNT(pd.id) FILTER (
@@ -125,6 +136,14 @@ SELECT
   p.program_title,
   p.status AS lifecycle_status,
   p.completed_mode,
+  (SELECT MAX(pcd.scheduled_date)::text FROM program_calendar_day pcd
+    JOIN program_day scheduled ON scheduled.id = pcd.program_day_id
+    WHERE pcd.program_id = p.id AND pcd.is_training_day = TRUE
+      AND scheduled.is_skipped IS NOT TRUE) AS last_scheduled_date,
+  (SELECT MAX(ts.local_date)::text FROM training_session ts
+    JOIN program_day trained ON trained.id = ts.program_day_id
+    WHERE trained.program_id = p.id AND ts.user_id = p.user_id) AS last_completed_session_date,
+  COUNT(pd.id) FILTER (WHERE pd.is_completed = FALSE AND pd.is_skipped IS NOT TRUE) AS incomplete_days,
   COUNT(pd.id) FILTER (WHERE pd.is_skipped IS NOT TRUE) AS total_days,
   COUNT(pd.id) FILTER (WHERE pd.is_completed = TRUE) AS completed_days,
   COUNT(pd.id) FILTER (
@@ -153,7 +172,7 @@ GROUP BY p.id
 `;
 
 function mapError(err) {
-  if (err instanceof RequestValidationError || err instanceof NotFoundError) {
+  if (err instanceof RequestValidationError || err instanceof NotFoundError || err instanceof LocalDateValidationError) {
     return {
       status: err.status ?? 400,
       code: err instanceof NotFoundError ? "not_found" : "validation_error",
@@ -248,16 +267,27 @@ function normalizeCompletedMode(mode) {
   return null;
 }
 
-function toEndCheckPayload(row) {
+function lapseDates(row, todayLocal) {
+  const lastScheduledDate = row.last_scheduled_date ?? null;
+  const daysSinceLastSession = row.last_completed_session_date
+    ? Math.round((Date.parse(`${todayLocal}T00:00:00Z`) - Date.parse(`${row.last_completed_session_date}T00:00:00Z`)) / 86400000) : null;
+  return { last_scheduled_date: lastScheduledDate,
+    schedule_ended: lastScheduledDate !== null && todayLocal > offsetLocalDate(lastScheduledDate, 1),
+    days_since_last_session: daysSinceLastSession };
+}
+
+function toEndCheckPayload(row, todayLocal = localDateInZone(new Date(), "UTC")) {
   const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
   const completedMode = normalizeCompletedMode(row.completed_mode);
   const totalDays = toFiniteNumber(row.total_days, 0);
   const completedDays = toFiniteNumber(row.completed_days, 0);
-  const missedWorkoutsCount = toFiniteNumber(row.missed_workouts_count, 0);
+  const dates = lapseDates(row, todayLocal);
+  const missedWorkoutsCount = toFiniteNumber(dates.schedule_ended ? row.incomplete_days : row.missed_workouts_count, 0);
   const skippedWorkoutsCount = toFiniteNumber(row.skipped_workouts_count, 0);
   const isLastScheduledDayComplete = asBoolean(row.is_last_scheduled_day_complete);
 
   return {
+    ...dates,
     program_id: asString(row.program_id),
     program_title: asString(row.program_title),
     lifecycle_status: lifecycleStatus,
@@ -269,8 +299,8 @@ function toEndCheckPayload(row) {
     is_last_scheduled_day_complete: isLastScheduledDayComplete,
     can_complete_with_skips:
       lifecycleStatus !== "completed" &&
-      isLastScheduledDayComplete &&
-      missedWorkoutsCount > 0,
+      completedDays < totalDays &&
+      (isLastScheduledDayComplete || dates.schedule_ended),
   };
 }
 
@@ -281,12 +311,20 @@ export function createProgramCompletionHandlers(db = pool) {
     throw new RequestValidationError("Missing authenticated user context");
   }
 
-  async function loadEndCheck(programId, userId) {
+  async function todayForRequest(req, userId, body = false) {
+    const context = await userTrainingContext(db, userId);
+    const input = body ? req.body : req.query;
+    return resolveLocalDate({ requestedLocalDate: input?.local_date,
+      requestedTimeZone: input?.timezone,
+      fallbackTimeZone: firstValidTimezone(context?.timezone, context?.reminder_timezone) }).localDate;
+  }
+
+  async function loadEndCheck(programId, userId, req, body = false) {
     const result = await db.query(SQL_END_CHECK, [programId, userId]);
     if (result.rowCount === 0) {
       throw new NotFoundError("Program not found");
     }
-    return toEndCheckPayload(result.rows[0]);
+    return toEndCheckPayload(result.rows[0], await todayForRequest(req, userId, body));
   }
 
   async function completionSummary(req, res) {
@@ -302,6 +340,8 @@ export function createProgramCompletionHandlers(db = pool) {
         throw new NotFoundError("Program not found");
       }
       const row = summaryResult.rows[0];
+      const dates = lapseDates(row, await todayForRequest(req, userId));
+      const lapsed = dates.days_since_last_session !== null && dates.days_since_last_session >= 21;
 
       const prResult = await db.query(SQL_PROGRAM_PRS, [program_id]);
 
@@ -310,15 +350,17 @@ export function createProgramCompletionHandlers(db = pool) {
       const exercisesProgressed = row.program_type ? toFiniteNumber(row.exercises_progressed, 0) : 0;
       const avgProgressionScore = row.program_type ? toFiniteNumber(row.avg_progression_score, 0) : 0;
       const avgConfidenceScore = row.program_type ? row.avg_confidence_score : null;
-      const suggestedNextRank = suggestNextRank(
+      const suggestedNextRank = Math.min(lapsed ? currentRank : Infinity, suggestNextRank(
         currentRank,
         avgProgressionScore,
         exercisesProgressed,
         exercisesTracked,
-      );
+      ));
 
       return res.json({
         ok: true,
+        lapsed,
+        days_since_last_session: dates.days_since_last_session,
         program_id: asString(row.program_id),
         program_title: asString(row.program_title),
         program_type: row.program_type ?? null,
@@ -326,7 +368,7 @@ export function createProgramCompletionHandlers(db = pool) {
         weeks_completed: toFiniteNumber(row.weeks_count, 0),
         days_completed: toFiniteNumber(row.completed_days, 0),
         days_total: toFiniteNumber(row.total_days, 0),
-        missed_workouts_count: toFiniteNumber(row.missed_workouts_count, 0),
+        missed_workouts_count: toFiniteNumber(dates.schedule_ended ? row.incomplete_days : row.missed_workouts_count, 0),
         skipped_workouts_count: toFiniteNumber(row.skipped_workouts_count, 0),
         is_last_scheduled_day_complete: asBoolean(row.is_last_scheduled_day_complete),
         lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
@@ -381,7 +423,7 @@ export function createProgramCompletionHandlers(db = pool) {
     try {
       requireUuid(program_id, "program_id");
       const userId = resolveUserId(req);
-      const payload = await loadEndCheck(program_id, userId);
+      const payload = await loadEndCheck(program_id, userId, req);
       return res.json({ ok: true, ...payload });
     } catch (err) {
       const mapped = mapError(err);
@@ -407,7 +449,7 @@ export function createProgramCompletionHandlers(db = pool) {
         throw new RequestValidationError("mode must be 'as_scheduled' or 'with_skips'");
       }
 
-      const endCheckPayload = await loadEndCheck(program_id, userId);
+      const endCheckPayload = await loadEndCheck(program_id, userId, req, true);
       if (endCheckPayload.lifecycle_status === "completed") {
         return res.json({
           ok: true,

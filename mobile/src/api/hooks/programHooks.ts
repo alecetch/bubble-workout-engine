@@ -240,6 +240,7 @@ export function useProgramCompletionSummary(
     queryKey: queryKeys.programCompletionSummary(programId ?? ""),
     queryFn: () => getProgramCompletionSummary(programId as string),
     enabled: Boolean(programId),
+    staleTime: 0,
   });
 }
 
@@ -250,6 +251,7 @@ export function useProgramEndCheck(
     queryKey: queryKeys.programEndCheck(programId ?? ""),
     queryFn: () => getProgramEndCheck(programId as string),
     enabled: Boolean(programId),
+    staleTime: 0,
   });
 }
 

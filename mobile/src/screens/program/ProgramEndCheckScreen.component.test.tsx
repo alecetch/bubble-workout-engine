@@ -1,3 +1,4 @@
+import { useSessionStore } from "../../state/session/sessionStore";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -67,6 +68,35 @@ describe("ProgramEndCheckScreen", () => {
       isError: false,
       error: null,
     } as any);
+  });
+  it("shows the ended date and closes with skips before opening the completion summary", async () => {
+    useProgramEndCheckMock.mockReturnValue({ data: { ...mockEndCheck, scheduleEnded: true, lastScheduledDate: "2026-04-28" }, isLoading: false, isError: false } as any);
+    const nav = renderScreen();
+    expect(screen.getByText("Your block ended on 28 Apr.")).toBeInTheDocument();
+    expect(screen.getByText("You completed 7 of 9 sessions. Finish the missed ones, or close this block and start your next one.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Finish missed sessions" }));
+    expect(nav.navigate).toHaveBeenCalledWith("ProgramDashboard", { programId: "prog-1" });
+    fireEvent.click(screen.getByRole("button", { name: "Close this block and continue" }));
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("ProgramComplete", { programId: "prog-1" }));
+    expect(mutateAsyncMock).toHaveBeenCalledWith({ programId: "prog-1", mode: "with_skips" });
+  });
+  for (const selected of ["prog-1", "another-program"]) it(`closing an ended block clears only its own active selection: ${selected}`, async () => {
+    useSessionStore.setState({ activeProgramId: selected });
+    useProgramEndCheckMock.mockReturnValue({ data: { ...mockEndCheck, scheduleEnded: true }, isLoading: false, isError: false } as any);
+    renderScreen(); fireEvent.click(screen.getByRole("button", { name: "Close this block and continue" }));
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalled());
+    expect(useSessionStore.getState().activeProgramId).toBe(selected === "prog-1" ? null : selected);
+    useSessionStore.getState().clearSession();
+  });
+  it("keeps the ended screen open and displays the inline completion error", async () => {
+    useSessionStore.setState({ activeProgramId: "prog-1" });
+    useProgramEndCheckMock.mockReturnValue({ data: { ...mockEndCheck, scheduleEnded: true }, isLoading: false, isError: false } as any);
+    mutateAsyncMock.mockRejectedValue(new Error("Try again"));
+    useCompleteProgramMock.mockReturnValue({ mutateAsync: mutateAsyncMock, isError: true, error: new Error("Try again"), isPending: false } as any);
+    const nav = renderScreen(); fireEvent.click(screen.getByRole("button", { name: "Close this block and continue" }));
+    await act(async () => {}); expect(screen.getByText("Try again")).toBeInTheDocument(); expect(nav.replace).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().activeProgramId).toBe("prog-1");
+    useSessionStore.getState().clearSession();
   });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();

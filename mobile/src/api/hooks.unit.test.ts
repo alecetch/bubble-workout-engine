@@ -1,3 +1,4 @@
+import { getProgramEndCheck, getProgramCompletionSummary } from "./programCompletion";
 import { getCheckIns } from "./physique";
 import React from "react";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -6,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   queryKeys,
   usePhysiqueCheckIns,
+  useProgramEndCheck,
+  useProgramCompletionSummary,
   useActivePrograms,
   useProgramDayFull,
   useProgramOverview,
@@ -16,6 +19,7 @@ import { fetchActivePrograms, setPrimaryProgram } from "./activePrograms";
 import { updateNotificationPreferences } from "./notifications";
 import { getProgramDayFull, getProgramOverview } from "./programViewer";
 
+vi.mock("./programCompletion", () => ({ getProgramEndCheck: vi.fn(), getProgramCompletionSummary: vi.fn(), completeProgram: vi.fn() }));
 vi.unmock("@tanstack/react-query");
 vi.mock("./physique", () => ({ getCheckIns: vi.fn().mockResolvedValue({ ok: true, check_ins: [] }) }));
 
@@ -99,6 +103,16 @@ describe("api hooks", () => {
     queryClient.clear();
   });
 
+  for (const kind of ["end", "summary"] as const) it(`refetches date-sensitive ${kind} data despite a fresh default cache`, async () => {
+    queryClient.setDefaultOptions({ queries: { retry: false, staleTime: 300000 } });
+    const key = kind === "end" ? queryKeys.programEndCheck("prog-1") : queryKeys.programCompletionSummary("prog-1");
+    const fetch = vi.mocked(kind === "end" ? getProgramEndCheck : getProgramCompletionSummary);
+    fetch.mockReset(); fetch.mockResolvedValue({ scheduleEnded: true, lapsed: true } as any);
+    queryClient.setQueryData(key, { scheduleEnded: false, lapsed: false });
+    const { result } = renderHook(() => kind === "end" ? useProgramEndCheck("prog-1") : useProgramCompletionSummary("prog-1"), { wrapper: makeWrapper(queryClient) });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("prog-1"));
+    await waitFor(() => expect(result.current.data).toEqual({ scheduleEnded: true, lapsed: true }));
+  });
   it("does not fetch disabled check-ins and resumes when enabled", async () => {
     vi.mocked(getCheckIns).mockClear();
     const { result, rerender } = renderHook(({ enabled }) => usePhysiqueCheckIns(1, { enabled }), {

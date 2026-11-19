@@ -168,6 +168,7 @@ export function useDayCompletionFlow(params: {
       const endCheck = await queryClient.fetchQuery({
         queryKey: queryKeys.programEndCheck(programId),
         queryFn: () => getProgramEndCheck(programId),
+        staleTime: 0,
       });
 
       let completionDestination: "ProgramComplete" | "ProgramEndCheck" | undefined;
