@@ -33,12 +33,13 @@ export type SubstitutionJobStatus = {
 export async function startEquipmentSubstitution(
   programId: string,
   availableEquipmentCodes: string[],
-): Promise<{ jobId: string }> {
-  const raw = await authPostJson<{ ok: boolean; jobId: string }, { availableEquipmentCodes: string[] }>(
+): Promise<{ jobId: string } & Partial<SubstitutionJobStatus>> {
+  const raw = await authPostJson<{ ok: boolean; jobId: string } & Partial<SubstitutionJobStatus>, { availableEquipmentCodes: string[] }>(
     `/api/programs/${encodeURIComponent(programId)}/equipment-substitution`,
     { availableEquipmentCodes },
   );
-  return { jobId: raw.jobId };
+  return { jobId: raw.jobId, status: raw.status, swappedCount: raw.swappedCount, warnings: raw.warnings,
+    unsubstitutedExerciseIds: raw.unsubstitutedExerciseIds, error: raw.error };
 }
 
 export async function pollSubstitutionJob(

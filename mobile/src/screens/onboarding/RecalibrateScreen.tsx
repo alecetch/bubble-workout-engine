@@ -1,6 +1,7 @@
 import { normalizeGoals, normalizeDays, normalizeFitnessLevel, normalizeSex, normalizeAgeRange } from "../../state/onboarding/profileNormalizers";
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingScaffold } from "../../components/onboarding/OnboardingScaffold";
 import { DayChipRow } from "../../components/onboarding/DayChipRow";
@@ -156,6 +157,7 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
   const selectedCategories = route.params.selectedCategories ?? [];
   const includes = (category: ChangeCategory): boolean => selectedCategories.includes(category);
 
+  const queryClient = useQueryClient();
   const meQuery = useMe();
   const profileId = meQuery.data?.clientProfileId ?? "";
   const profileQuery = useClientProfile(profileId);
@@ -325,8 +327,20 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       }
 
       if (includes("equipment") && equipmentChanged && resolvedActiveProgramId && (draft.selectedEquipmentCodes?.length ?? 0) > 0) {
-        const { jobId } = await startEquipmentSubstitution(resolvedActiveProgramId, draft.selectedEquipmentCodes ?? []);
-        navigation.navigate("SubstitutionProgress", { programId: resolvedActiveProgramId, jobId });
+        const result = await startEquipmentSubstitution(resolvedActiveProgramId, draft.selectedEquipmentCodes ?? []);
+        if (result.status === "failed") {
+          Alert.alert("Update failed", result.error ?? "Something went wrong updating your program. Nothing was changed.");
+          return;
+        }
+        if (result.status === "complete" || result.status === "partial") {
+          await queryClient.invalidateQueries({ queryKey: ["programOverview"] });
+          if (result.status === "partial" && (result.unsubstitutedExerciseIds?.length ?? 0) > 0) {
+            Alert.alert("Program updated", `${result.swappedCount ?? 0} exercises swapped. ${result.unsubstitutedExerciseIds?.length ?? 0} could not be substituted.`);
+          }
+          navigation.navigate("ProgramDashboard", { programId: resolvedActiveProgramId });
+          return;
+        }
+        navigation.navigate("SubstitutionProgress", { programId: resolvedActiveProgramId, jobId: result.jobId });
         return;
       }
 

@@ -28,8 +28,9 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
     try { await pool.query('SELECT 1'); }
     catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
     const updates = [];
-    const jobs = new Map();
+
     const db = { async query(sql, params) {
+      if (/^(BEGIN|COMMIT|ROLLBACK|SET LOCAL)/.test(sql.trim()) || sql.includes('equipment_substitution_job')) return { rowCount: 1, rows: [] };
       if (sql.includes('SELECT id FROM program WHERE')) return { rowCount: 1, rows: [{ id: PROGRAM_ID }] };
       if (sql.includes('SELECT fitness_level_slug,')) {
         assert.deepEqual(params, [USER_ID], 'Load the authenticated owner profile');
@@ -39,14 +40,12 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
       if (sql.includes('UPDATE program_exercise')) { updates.push(params[0]); return { rowCount: 1, rows: [] }; }
       if (label === 'wrist label' && sql.includes('replacement.contraindications_slugs')) assert.deepEqual(params[4], ['wrist_elbow'], 'Substitution query must filter the stored label as a canonical code');
       return pool.query(sql, params);
-    } };
-    const handlers = createProgramDayActionHandlers(db, jobs);
+    }, async connect() { return { query: db.query, release() {} }; } };
+    const handlers = createProgramDayActionHandlers(db);
     const res = mockRes();
     await handlers.startEquipmentSubstitution(makeReq({ body: { availableEquipmentCodes: equipment } }), res);
     assert.equal(res.statusCode, 202, JSON.stringify(res.body));
-    const deadline = Date.now() + 5000;
-    while (jobs.get(res.body.jobId)?.status === 'running' && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
-    const job = jobs.get(res.body.jobId);
+    const job = res.body;
     if (label === 'no compatible replacement') {
       assert.equal(job.status, 'partial', JSON.stringify(job));
       assert.deepEqual(updates, []);
