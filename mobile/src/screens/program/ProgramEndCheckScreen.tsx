@@ -1,3 +1,4 @@
+import { useSessionStore } from "../../state/session/sessionStore";
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -37,6 +38,10 @@ export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.E
   async function handleCompleteAnyway(): Promise<void> {
     try {
       await completeProgram.mutateAsync({ programId, mode: "with_skips" });
+      if (endCheckQuery.data?.scheduleEnded) {
+        const session = useSessionStore.getState();
+        if (session.activeProgramId === programId) session.setActiveProgramId(null);
+      }
       goToProgramComplete();
     } catch {
       // mutation error renders in the body below
@@ -68,14 +73,18 @@ export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.E
   }
 
   const endCheck = endCheckQuery.data;
+  const endedDate = endCheck.lastScheduledDate
+    ? new Date(`${endCheck.lastScheduledDate}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
   const showCompletionPath = endCheck.canCompleteWithSkips || endCheck.lifecycleStatus === "completed";
 
   return (
     <View style={styles.root}>
       <View style={styles.card}>
-        <Text style={styles.title}>You reached the end of this block</Text>
+        <Text style={styles.title}>{endCheck.scheduleEnded ? endedDate ? `Your block ended on ${endedDate}.` : "Your block has ended." : "You reached the end of this block"}</Text>
         <Text style={styles.body}>
-          {showCompletionPath
+          {endCheck.scheduleEnded
+            ? `You completed ${endCheck.completedDays} of ${endCheck.totalDays} sessions. Finish the missed ones, or close this block and start your next one.`
+            : showCompletionPath
             ? `You still have ${formatMissed(endCheck.missedWorkoutsCount)} in this program. You can finish them first, or move on to your next block now.`
             : "You still have workouts left in this program before you can end this block."}
         </Text>
@@ -94,21 +103,23 @@ export function ProgramEndCheckScreen({ route, navigation }: Props): React.JSX.E
           <Text style={styles.inlineError}>{completeProgram.error?.message ?? "Unable to complete program."}</Text>
         ) : null}
 
-        <PressableScale style={styles.primaryButton} onPress={goToProgramDashboard}>
-          <Text style={styles.primaryLabel}>Finish missed workouts</Text>
-        </PressableScale>
-
-        <PressableScale
-          style={[styles.secondaryButton, !showCompletionPath && styles.buttonDisabled]}
-          onPress={() => {
-            void handleCompleteAnyway();
-          }}
-          disabled={!showCompletionPath || completeProgram.isPending}
-        >
-          <Text style={styles.secondaryLabel}>
-            {completeProgram.isPending ? "Completing..." : "Complete program anyway"}
-          </Text>
-        </PressableScale>
+        {endCheck.scheduleEnded ? <>
+          <PressableScale style={[styles.primaryButton, !showCompletionPath && styles.buttonDisabled]}
+            disabled={!showCompletionPath || completeProgram.isPending} onPress={() => { void handleCompleteAnyway(); }}>
+            <Text style={styles.primaryLabel}>{completeProgram.isPending ? "Completing..." : "Close this block and continue"}</Text>
+          </PressableScale>
+          <PressableScale style={styles.secondaryButton} onPress={goToProgramDashboard}>
+            <Text style={styles.secondaryLabel}>Finish missed sessions</Text>
+          </PressableScale>
+        </> : <>
+          <PressableScale style={styles.primaryButton} onPress={goToProgramDashboard}>
+            <Text style={styles.primaryLabel}>Finish missed workouts</Text>
+          </PressableScale>
+          <PressableScale style={[styles.secondaryButton, !showCompletionPath && styles.buttonDisabled]}
+            disabled={!showCompletionPath || completeProgram.isPending} onPress={() => { void handleCompleteAnyway(); }}>
+            <Text style={styles.secondaryLabel}>{completeProgram.isPending ? "Completing..." : "Complete program anyway"}</Text>
+          </PressableScale>
+        </>}
 
         <Text style={styles.footnote}>Skipped workouts will remain incomplete.</Text>
       </View>

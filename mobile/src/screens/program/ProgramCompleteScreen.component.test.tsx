@@ -97,6 +97,13 @@ describe("ProgramCompleteScreen", () => {
       refetch: vi.fn(),
     } as any);
   });
+  for (const lapsed of [false, true]) it(`shows welcome-back explanation only for a lapse: ${lapsed}`, () => {
+    useProgramCompletionSummaryMock.mockReturnValue({ data: { ...summary, lapsed }, isLoading: false, isError: false } as any);
+    renderScreen();
+    const copy = "Welcome back. We've kept your next block at the same level so you can ease back in.";
+    if (lapsed) expect(screen.getByText(copy)).toBeInTheDocument();
+    else expect(screen.queryByText(copy)).not.toBeInTheDocument();
+  });
   it("has no accessibility violations in the default render state", async () => {
     renderScreen();
     await act(async () => {});

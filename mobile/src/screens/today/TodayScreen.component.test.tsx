@@ -107,6 +107,20 @@ describe("TodayScreen", () => {
       await Promise.resolve();
     });
   }
+  it("offers next-block and missed-session paths with the completed session count", async () => {
+    getDayStatusMock.mockImplementation(async id => id === "done" ? "complete" : "scheduled");
+    useProgramOverviewMock.mockReturnValue({ data: overview([
+      { calendarDate: "2026-04-01", programDayId: "done", isTrainingDay: true },
+      { calendarDate: "2026-04-28", programDayId: "missed", isTrainingDay: true },
+    ]), isLoading: false, isError: false } as any);
+    render(<TodayScreen />); await flushEffects();
+    expect(screen.getByText("Your block has ended.")).toBeInTheDocument();
+    expect(screen.getByText("You completed 1 of 2 sessions. Start your next block when you're ready.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start your next block" }));
+    expect(navigationMocks.navigate).toHaveBeenLastCalledWith("ProgramsTab", { screen: "ProgramEndCheck", params: { programId: "prog-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Finish missed sessions" }));
+    expect(navigationMocks.navigate).toHaveBeenLastCalledWith("ProgramsTab", { screen: "ProgramDashboard", params: { programId: "prog-1" } });
+  });
   it("claims the highest unseen milestone once and acknowledges the whole group on dismissal", async () => {
     const milestone = { id: "day100", slug: "day_100", threshold: 100, year: 2026 };
     const older = { id: "day50", slug: "day_50", threshold: 50, year: 2026 };

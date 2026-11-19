@@ -5,6 +5,7 @@ export type TodayLifecycleState =
   | "today_scheduled"
   | "today_started"
   | "today_complete"
+  | "block_ended"
   | "today_rest"
   | "program_complete";
 
@@ -13,6 +14,7 @@ export function computeLifecycleState(params: {
   calendarDays: Array<{
     calendarDate?: string | null;
     isTrainingDay?: boolean;
+    isSkipped?: boolean | null;
     programDayId?: string | null;
   }>;
   dayStatusByProgramDayId: Record<string, ProgramDayStatus>;
@@ -45,6 +47,13 @@ export function computeLifecycleState(params: {
   ) {
     return "program_complete";
   }
+
+  const yesterday = new Date(`${todayIso}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const cutoff = yesterday.toISOString().slice(0, 10);
+  const scheduled = allTrainingDays.filter(day => !day.isSkipped && dayStatusByProgramDayId[day.programDayId!] !== "skipped");
+  if (scheduled.length > 0 && scheduled.some(day => dayStatusByProgramDayId[day.programDayId!] !== "complete") &&
+    scheduled.every(day => Boolean(day.calendarDate) && day.calendarDate! < cutoff)) return "block_ended";
 
   return "today_rest";
 }

@@ -1,3 +1,4 @@
+import { toLocalIsoDate, deviceTimeZone } from "../utils/localDate";
 import { displayLabel } from "../utils/displayLabel";
 import { authGetJson, authPostJson } from "./client";
 
@@ -35,6 +36,7 @@ export type ProgramLifecycleStatus = "in_progress" | "completed";
 export type ProgramCompletedMode = "as_scheduled" | "with_skips" | null;
 
 export type ProgramCompletionSummary = {
+  lapsed: boolean;
   programId: string;
   programTitle: string;
   programType: string | null;
@@ -60,6 +62,9 @@ export type ProgramCompletionSummary = {
 };
 
 export type ProgramEndCheck = {
+  lastScheduledDate: string | null;
+  scheduleEnded: boolean;
+  daysSinceLastSession: number | null;
   programId: string;
   programTitle: string;
   lifecycleStatus: ProgramLifecycleStatus;
@@ -101,6 +106,11 @@ function asNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+function nullableNumber(value: unknown): number | null {
+  const number = asNumber(value, NaN);
+  return Number.isFinite(number) ? number : null;
+}
+
 function asBoolean(value: unknown): boolean {
   return value === true;
 }
@@ -139,6 +149,7 @@ function normalizeProgramCompletionSummary(raw: unknown): ProgramCompletionSumma
   const currentProfile = asObject(root.current_profile ?? root.currentProfile);
 
   return {
+    lapsed: asBoolean(root.lapsed),
     programId: asString(root.program_id ?? root.programId),
     programTitle: asString(root.program_title ?? root.programTitle, "Training Program"),
     programType: asNullableString(root.program_type ?? root.programType),
@@ -218,6 +229,11 @@ function normalizeProgramCompletionSummary(raw: unknown): ProgramCompletionSumma
 function normalizeProgramEndCheck(raw: unknown): ProgramEndCheck {
   const root = asObject(raw);
   return {
+    lastScheduledDate: typeof (root.last_scheduled_date ?? root.lastScheduledDate) === "string"
+      ? String(root.last_scheduled_date ?? root.lastScheduledDate) : null,
+    scheduleEnded: asBoolean(root.schedule_ended ?? root.scheduleEnded),
+    daysSinceLastSession: root.days_since_last_session == null && root.daysSinceLastSession == null ? null
+      : nullableNumber(root.days_since_last_session ?? root.daysSinceLastSession),
     programId: asString(root.program_id ?? root.programId),
     programTitle: asString(root.program_title ?? root.programTitle, "Training Program"),
     lifecycleStatus: normalizeLifecycleStatus(root.lifecycle_status ?? root.lifecycleStatus),
@@ -233,17 +249,21 @@ function normalizeProgramEndCheck(raw: unknown): ProgramEndCheck {
   };
 }
 
+function trainingDateQuery(): string {
+  return new URLSearchParams({ local_date: toLocalIsoDate(), timezone: deviceTimeZone() }).toString();
+}
+
 export async function getProgramCompletionSummary(
   programId: string,
 ): Promise<ProgramCompletionSummary> {
   const raw = await authGetJson<unknown>(
-    `/api/program/${encodeURIComponent(programId)}/completion-summary`,
+    `/api/program/${encodeURIComponent(programId)}/completion-summary?${trainingDateQuery()}`,
   );
   return normalizeProgramCompletionSummary(raw);
 }
 
 export async function getProgramEndCheck(programId: string): Promise<ProgramEndCheck> {
-  const raw = await authGetJson<unknown>(`/api/program/${encodeURIComponent(programId)}/end-check`);
+  const raw = await authGetJson<unknown>(`/api/program/${encodeURIComponent(programId)}/end-check?${trainingDateQuery()}`);
   return normalizeProgramEndCheck(raw);
 }
 
@@ -251,9 +271,9 @@ export async function completeProgram(
   programId: string,
   mode: "as_scheduled" | "with_skips",
 ): Promise<{ ok: boolean; programId: string; lifecycleStatus: ProgramLifecycleStatus; completedMode: ProgramCompletedMode }> {
-  const raw = await authPostJson<unknown, { mode: "as_scheduled" | "with_skips" }>(
+  const raw = await authPostJson<unknown, { mode: "as_scheduled" | "with_skips"; local_date: string; timezone: string }>(
     `/api/program/${encodeURIComponent(programId)}/complete`,
-    { mode },
+    { mode, local_date: toLocalIsoDate(), timezone: deviceTimeZone() },
   );
   const root = asObject(raw);
   return {

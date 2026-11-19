@@ -345,6 +345,26 @@ export function TodayScreen(): React.JSX.Element {
     );
   }
 
+  if (lifecycleState === "block_ended") {
+    const training = calendarDays.filter(day => day.isTrainingDay && day.programDayId && !day.isSkipped &&
+      dayStatusByProgramDayId[day.programDayId] !== "skipped");
+    const done = training.filter(day => dayStatusByProgramDayId[day.programDayId!] === "complete").length;
+    return (
+      <ScrollView contentContainerStyle={styles.content}>
+        {yearCard}
+        <Text style={styles.title}>Your block has ended.</Text>
+        <Text style={styles.subtitle}>{`You completed ${done} of ${training.length} sessions. Start your next block when you're ready.`}</Text>
+        <PressableScale style={styles.primaryButton} onPress={() => navigation.navigate("ProgramsTab", {
+          screen: "ProgramEndCheck", params: { programId: resolvedProgramId },
+        } as never)}><Text style={styles.primaryLabel}>Start your next block</Text></PressableScale>
+        <PressableScale style={styles.secondaryButton} onPress={() => navigation.navigate("ProgramsTab", {
+          screen: "ProgramDashboard", params: { programId: resolvedProgramId },
+        } as never)}><Text style={styles.secondaryLabel}>Finish missed sessions</Text></PressableScale>
+        {outsideEntry}
+      </ScrollView>
+    );
+  }
+
   if (lifecycleState === "today_rest") {
     const rec = overviewQuery.data?.bonusDayRecommendation;
 
