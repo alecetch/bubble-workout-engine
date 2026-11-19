@@ -35,7 +35,7 @@ async function fixture(fn) {
     syncUserEntitlement: async () => { calls.push(['sync']); },
     notificationService: { send: async args => { calls.push(['push', args]); return { sent: true }; } },
   };
-  const run = () => runReferralRewards(pool, deps, { now: () => now, log: x => logs.push(x) });
+  const run = () => runReferralRewards(pool, deps, { now: () => now, log: x => logs.push(x), heartbeat: async (_options, fn) => fn() });
   const read = async () => (await pool.query('SELECT * FROM referral_conversion WHERE id=$1', [row.id])).rows[0];
   try { await fn({ row, referrer, deps, calls, run, read, addRow, logs }); }
   finally { await pool.query('DELETE FROM app_user WHERE id = ANY($1::uuid[])', [ids]); }
@@ -176,3 +176,20 @@ test('concurrent due rewards respect cap across different referred users', { ski
   assert.deepEqual(Object.fromEntries(result.rows.map(r => [r.reward_status, r.count])), { granted: 2, capped: 1 });
   assert.equal(f.calls.filter(c => c[0] === 'promo').length, 1);
 }));
+
+for (const scenario of ["locked", "busy", "error"]) test(`heartbeat: ${scenario} run`, async t => {
+  const heartbeats = [], results = []; let releases = 0;
+  const db = { async connect() { return { async query(sql) {
+    if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: scenario !== "busy" }] };
+    if (scenario === "error" && sql.startsWith("SELECT *")) throw Error("run failed");
+    return { rows: [] };
+  }, release() { releases++; } }; }, async query() {
+    if (scenario === "error") throw Error("run failed"); return { rows: [] };
+  } };
+  const heartbeat = async (options, fn) => { heartbeats.push(options); try { const result = await fn(); results.push("ok"); return result; } catch (error) { results.push("error"); throw error; } };
+  const job = startReferralRewardJob({ db, env: { REFERRAL_REWARDS_ENABLED: "true" }, heartbeat, intervalMs: 900000 });
+  t.after(job.stop); await job.tick();
+  assert.equal(heartbeats.length, scenario === "busy" ? 0 : 1);
+  assert.deepEqual(results, scenario === "busy" ? [] : [scenario === "error" ? "error" : "ok"]);
+  assert.equal(releases, 1);
+});

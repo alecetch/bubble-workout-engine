@@ -66,6 +66,15 @@ jobs:
           cache: "npm"
           cache-dependency-path: api/package-lock.json
 
+      # actionlint 1.7.7 predates the existing hosted macos-26 runner label.
+      # Limit this new gate to the backup workflow; existing iOS CI is unchanged.
+      - name: Lint off-site backup workflow
+        run: |
+          set -euo pipefail
+          curl -fsSLo "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" .github/workflows/db-offsite-backup.yml
+
       - name: Check Node version pins
         run: node scripts/check-node-version-pins.mjs
 
@@ -98,6 +107,15 @@ jobs:
           DATABASE_URL: postgres://workout:workout@127.0.0.1:5432/workout_test
           NODE_ENV: test
         run: node scripts/check_configs.mjs
+
+      - name: Test restore verification
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: workout
+          PGPASSWORD: workout
+          PGDATABASE: workout_test
+        run: node --test scripts/__tests__/verify-restore.test.mjs scripts/__tests__/offsite-backup.test.mjs
 
       - name: Run API tests
         working-directory: api

@@ -6,7 +6,7 @@ function fixture({ locked = true, error = false, pending } = {}) {
   const client = { async query(sql) { queries.push(sql); return { rows: [{ locked }] }; }, release() { releases++; } };
   const db = { async connect() { return client; }, async query() { runs++; if (pending) await pending; if (error) throw Error("query failed"); return { rows: [] }; } };
   const logger = { info: log => logs.push(log), error: log => logs.push(log) };
-  const scheduler = startWorkoutReminderScheduler({ db, notificationService: { send() { throw Error("unexpected send"); } }, logger, intervalMs: 3600000 });
+  const scheduler = startWorkoutReminderScheduler({ db, notificationService: { send() { throw Error("unexpected send"); } }, logger, intervalMs: 3600000, heartbeat: async (_options, fn) => fn() });
   return { scheduler, queries, logs, get releases() { return releases; }, get runs() { return runs; } };
 }
 test("scheduler flag requires exactly true", () => {
@@ -37,4 +37,21 @@ test("overlapping and stopped ticks skip", async t => {
   await f.scheduler.tick(); assert.equal(f.runs, 1);
   resolve(); await first; assert.equal(f.runs, 2); assert.equal(f.releases, 1);
   f.scheduler.stop(); await f.scheduler.tick(); assert.equal(f.runs, 2);
+});
+
+for (const scenario of ["locked", "busy", "error"]) test(`heartbeat: ${scenario} run`, async t => {
+  const heartbeats = [], results = []; let releases = 0;
+  const db = { async connect() { return { async query(sql) {
+    if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: scenario !== "busy" }] };
+    if (scenario === "error" && sql.startsWith("SELECT *")) throw Error("run failed");
+    return { rows: [] };
+  }, release() { releases++; } }; }, async query() {
+    if (scenario === "error") throw Error("run failed"); return { rows: [] };
+  } };
+  const heartbeat = async (options, fn) => { heartbeats.push(options); try { const result = await fn(); results.push("ok"); return result; } catch (error) { results.push("error"); throw error; } };
+  const job = startWorkoutReminderScheduler({ db, notificationService: { send() {} }, heartbeat, intervalMs: 900000 });
+  t.after(job.stop); await job.tick();
+  assert.equal(heartbeats.length, scenario === "busy" ? 0 : 1);
+  assert.deepEqual(results, scenario === "busy" ? [] : [scenario === "error" ? "error" : "ok"]);
+  assert.equal(releases, 1);
 });
