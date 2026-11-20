@@ -12,14 +12,14 @@
   "evidenceUrl": "REPLACE_WITH_DURABLE_HTTPS_EVIDENCE",
   "notificationTapThroughEnabled": false,
   "checks": {
-    "auth_keychain": "pending",
-    "notification_allow": "pending",
-    "notification_deny": "pending",
-    "universal_link_cold": "pending",
-    "universal_link_warm": "pending",
-    "workout_complete": "pending",
-    "rapid_loading_unmount": "pending",
-    "technique_media": "pending",
-    "notification_tap_through": "pending"
+    "auth_keychain": "REPLACE_WITH_PASS",
+    "notification_allow": "REPLACE_WITH_PASS",
+    "notification_deny": "REPLACE_WITH_PASS",
+    "universal_link_cold": "REPLACE_WITH_PASS",
+    "universal_link_warm": "REPLACE_WITH_PASS",
+    "workout_complete": "REPLACE_WITH_PASS",
+    "rapid_loading_unmount": "REPLACE_WITH_PASS",
+    "technique_media": "REPLACE_WITH_PASS",
+    "notification_tap_through": "disabled"
   }
 }

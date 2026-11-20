@@ -2,11 +2,18 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionRestoration } from "./useSessionRestoration";
 import { restoreSession, type RestoreOutcome } from "./restoreSession";
-import { clearTokens } from "../../api/tokenStorage";
+import { reportError } from "../../lib/crashReporting";
+import { getMe } from "../../api/me";
+import { clearTokens, getAccessToken } from "../../api/tokenStorage";
 import { queryClient } from "../../api/queryClient";
 import { useSessionStore } from "./sessionStore";
 vi.mock("./restoreSession", () => ({ restoreSession: vi.fn() }));
-vi.mock("../../api/tokenStorage", () => ({ clearTokens: vi.fn() }));
+vi.mock("../../api/tokenStorage", () => ({ clearTokens: vi.fn(), getAccessToken: vi.fn() }));
+vi.mock("../../api/me", () => ({ getMe: vi.fn() }));
+vi.mock("../../api/clientProfiles", () => ({ getClientProfile: vi.fn() }));
+vi.mock("../../api/entitlement", () => ({ getEntitlement: vi.fn() }));
+vi.mock("../../lib/purchases", () => ({ logInPurchases: vi.fn() }));
+vi.mock("../../lib/crashReporting", () => ({ reportError: vi.fn() }));
 beforeEach(() => {
   vi.mocked(restoreSession).mockReset();
   vi.mocked(clearTokens).mockReset().mockResolvedValue(undefined);
@@ -63,5 +70,17 @@ describe("startup restoration lifecycle", () => {
     expect(isActive()).toBe(true);
     unmount();
     expect(isActive()).toBe(false);
+  });
+  it("an actual token read failure leaves startup ready and signed out for Welcome", async () => {
+    const actual = await vi.importActual<typeof import("./restoreSession")>("./restoreSession");
+    const error = new Error("private Keychain error");
+    vi.mocked(getAccessToken).mockRejectedValueOnce(error);
+    vi.mocked(restoreSession).mockImplementationOnce(actual.restoreSession);
+    const { result } = renderHook(() => useSessionRestoration());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    expect(useSessionStore.getState().isAuthenticated).toBe(false);
+    expect(result.current.isRetrying).toBe(false);
+    expect(getMe).not.toHaveBeenCalled(); expect(clearTokens).not.toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledWith(error, "session.token_read_failed");
   });
 });

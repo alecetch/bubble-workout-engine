@@ -4,12 +4,12 @@ Decision (2026-09-23): accept the Android-only E2E gap conditionally, with a phy
 
 ## Required release sequence
 
-1. Build and upload an internal TestFlight candidate. Internal tester distribution is permitted so the exact binary can be tested; do not enable external distribution or submit for App Store review yet.
+1. Run **Actions > iOS Maestro smoke** on the source branch before each EAS iOS release build and retain its run URL in the candidate evidence. Then build and upload an internal TestFlight candidate. Internal tester distribution is permitted so the exact binary can be tested; do not enable external distribution or submit for App Store review yet.
 2. Obtain its exact EAS build ID, source commit, app version and build number from the build details. Check these against the installed TestFlight binary. Never substitute the latest build automatically.
 3. Run every check below on a physical iPhone using that candidate and its actual environment flags. Record screenshots/video/logs in a durable private issue or release record; avoid credentials and personal data.
 4. Copy `signoff.example.json` to `<version>-<build-number>.json`, replace placeholders, and record the actual tester, device, iOS version, UTC test time, evidence URL and each result. No skipped required checks. When notification tap-through is off, set its check to `disabled`; when on, it must pass.
 5. Commit the completed record through review. From `mobile`, run `npm run check:ios-signoff -- ../releases/ios/<record>.json <build-id> <source-sha>`.
-6. Run **iOS release readiness** in GitHub Actions on the branch containing the reviewed record, supplying that path, build ID and source SHA. It validates the attestation, audits the candidate source and archives the record. Include the successful run URL and committed JSON link in release notes.
+6. Run **Actions > iOS release readiness > Run workflow** (`.github/workflows/ios-release-readiness.yml`) in GitHub Actions on the branch containing the reviewed record, supplying that path, build ID and source SHA. It validates the attestation, audits the candidate source and archives the record. Include the successful run URL and committed JSON link in release notes.
 7. Only then promote that exact TestFlight candidate to external testers / App Store review. A changed binary, commit or enabled feature flag needs new verification. Records expire for release eligibility after seven days; their history remains in Git. After artifact expiry, the committed record and evidence link remain the durable source.
 
 This workflow does not publish, change App Store permissions, or verify that a person truthfully performed device checks. The release owner must enforce the successful-run requirement when promoting in App Store Connect. Direct console actions remain outside repository enforcement. There is no completed sign-off in the example and no current release is approved by this change.
@@ -19,7 +19,7 @@ This workflow does not publish, change App Store permissions, or verify that a p
 - `auth_keychain`: log in, force quit, relaunch, verify authentication persists; log out and confirm protected screens are inaccessible.
 - `notification_allow`: with permission genuinely undetermined, exercise the native Allow prompt; registration and app navigation work.
 - `notification_deny`: separately exercise Don't Allow; app remains usable without token registration. Turning notifications off in Settings is not equivalent to resetting the first-time prompt. Use a suitable fresh test installation/device and record how the permission state was established.
-- `universal_link_cold` / `universal_link_warm`: tap a valid `https://getformai.com/ref/<CODE>` link from Notes/Messages with the candidate terminated and running; confirm native launch and referral capture.
+- `universal_link_cold` / `universal_link_warm`: tap a valid `https://200days.app/ref/<CODE>` link from Notes/Messages with the candidate terminated and running; confirm native launch and referral capture.
 - `workout_complete`: log in, open a program, start a workout, log a set and complete the day.
 - `rapid_loading_unmount`: repeatedly navigate away while dashboard/day data loads; no native exception or stuck screen.
 - `technique_media`: open technique guidance and exercise media, close and reopen, and navigate back; no native crash.
@@ -33,6 +33,12 @@ Normal CI checks production mobile source for `expo-av` imports and Reanimated r
 
 The audit found and removed the reintroduced infinite SkeletonBlock shimmer. No production expo-av imports were found. Notification tap-through remains opt-in. expo-video is present and still needs real-device verification.
 
-Follow-up: `docs/planning/ticket-ios-maestro-smoke-ci.md` (3-5 engineering days plus a week of CI observation).
+The simulator smoke is nightly on `main` and dispatched before release builds, not a required PR/deploy check. Track at least five non-injected runs over at least a week in `mobile/.maestro/ios/RELIABILITY.md`; negative controls must be red. Native success and reliability are pending owner evidence.
 
 References: [EAS CLI build inspection](https://docs.expo.dev/eas/cli/) and [GitHub workflow artifacts](https://docs.github.com/actions/configuring-and-managing-workflows/persisting-workflow-data-using-artifacts).
+
+## Record fields and workflow inputs
+
+Keep the existing schema: `schemaVersion: 1`, exact EAS UUID `buildId`, full 40-character `sourceCommit`, `tester`, `appVersion`, `buildNumber`, `deviceModel`, `iosVersion`, `physicalDevice: true`, a UTC `testedAt` no more than seven days old and not in the future, durable HTTPS `evidenceUrl`, boolean `notificationTapThroughEnabled`, and `checks`. Every one of the eight required checks above must be `pass`. `notification_tap_through` must be `disabled` when the flag is false and `pass` when true. The checked-in example is deliberately rejected; it is not release evidence.
+
+The Actions inputs are `signoff_path` (committed `releases/ios/<version>-<build>.json`), `build_id` (that EAS UUID), and `source_sha` (that build's exact source commit). Select the branch containing the reviewed record. The workflow validates freshness and the exact build/commit, audits the candidate source and archives the record. It does not build or publish an app.

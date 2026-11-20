@@ -77,6 +77,19 @@ describe("crashReporting", () => {
     });
   });
 
+  it("context-only reports exclude the original native message, stack and properties", async () => {
+    const { reportError, Sentry } = await loadWithDsn("https://example@sentry.io/1");
+    const original = Object.assign(new Error("saved-token user@example.test"), { code: -34018, token: "private-token" });
+    reportError(original, "session.token_read_failed");
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const [reported, context] = vi.mocked(Sentry.captureException).mock.calls[0];
+    expect(reported).not.toBe(original);
+    expect((reported as Error).message).toBe("session.token_read_failed");
+    expect(context).toEqual({ tags: { context: "session.token_read_failed" } });
+    expect(String((reported as Error).stack)).not.toContain("saved-token");
+    expect(JSON.stringify([reported, context])).not.toMatch(/saved-token|user@example.test|private-token/);
+  });
+
   it("syncs user context only when the DSN is set", async () => {
     const unset = await loadWithDsn(undefined);
 
