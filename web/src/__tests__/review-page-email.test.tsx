@@ -208,4 +208,13 @@ describe("ReviewPage email collection", () => {
       expect(screen.getByText(/We couldn't generate your report just now\. Please try again/i)).toBeInTheDocument();
     });
   });
+
+  test("marketing consent is fresh even when a full restored draft contains stale consent", async () => {
+    seedDraft(); saveDraft({ marketingConsent: true, athlete: { name: "Full Athlete", email: "full@example.test", gender: "female", ageGroup: "30-34" } });
+    renderPage();
+    expect(screen.getByRole("checkbox", { name: /send me hyrox training updates/i })).not.toBeChecked();
+    expect(screen.getByTestId("email-input")).toHaveValue("full@example.test");
+    fireEvent.click(screen.getAllByRole("button", { name: /generate my report/i })[0]);
+    await waitFor(() => expect(submitHyroxAnalysis).toHaveBeenCalledWith(expect.objectContaining({ marketingConsent: false })));
+  });
 });

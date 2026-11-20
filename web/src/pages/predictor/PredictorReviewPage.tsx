@@ -58,7 +58,7 @@ export function PredictorReviewPage() {
   const draft = loadPredictorDraft();
   const honeypotRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(draft.athlete.email ?? "");
-  const [marketingConsent, setMarketingConsent] = useState(draft.marketingConsent);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [researchConsent, setResearchConsent] = useState(draft.researchConsent);
   const [appLinkConsent, setAppLinkConsent] = useState(draft.appLinkConsent);
   const [loading, setLoading] = useState(false);

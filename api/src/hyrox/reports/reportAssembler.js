@@ -97,6 +97,7 @@ export function assembleReport(request = {}) {
     target = null,
     calculatorMode = "target",
     submissionId = null,
+    restoreToken = null,
   } = request;
   const athleteContext = rawAthleteContext ?? {};
 
@@ -131,7 +132,7 @@ export function assembleReport(request = {}) {
     report.templateId = "PERSONAL_REPORT";
     const interpretation = buildInterpretation(analysisJson, athleteContext, calculatorMode);
     const personal = buildPersonalReport(analysisJson, resolved, athleteContext, interpretation, calculatorMode, report.contract);
-    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation, calculatorMode, report.contract, submissionId);
+    const email = buildEmailReport(personal, analysisJson, athleteContext, interpretation, calculatorMode, report.contract, submissionId, restoreToken);
     report.sections = personal.sections;
     report.recommendations = personal.recommendations;
     report.emailSubject = email.subject;

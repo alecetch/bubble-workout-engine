@@ -92,7 +92,7 @@ export function ResultPage() {
   const timePotential = summary.timePotential;
   const biggestStrength = summary.biggestStrength;
   const targetUrl = submissionId
-    ? `/hyrox-calculator/race-details?mode=target&source=analysis_complete&submissionId=${encodeURIComponent(submissionId)}`
+    ? `/hyrox-calculator/race-details?mode=target&source=analysis_complete&submissionId=${encodeURIComponent(submissionId)}${response.restoreToken ? `#rt=${encodeURIComponent(response.restoreToken)}` : ""}`
     : null;
   const showTargetCta = Boolean(targetUrl && responseMode !== "target");
 

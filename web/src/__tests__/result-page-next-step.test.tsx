@@ -152,4 +152,14 @@ describe("ResultPage next-step panel", () => {
       "/hyrox-calculator",
     );
   });
+
+  test("target restore link carries credentials only in its fragment", () => {
+    renderResult({ ...baseResponse, restoreToken: "v1.1800000000.test" });
+    const link = screen.getByRole("link", { name: /hit a target time using this race/i });
+    const url = new URL(link.getAttribute("href")!, window.location.origin);
+    expect(url.hash).toBe("#rt=v1.1800000000.test");
+    expect(url.searchParams.has("rt")).toBe(false); expect(url.searchParams.has("token")).toBe(false);
+    expect(JSON.stringify(vi.mocked(trackEvent).mock.calls)).not.toContain("v1.1800000000.test");
+    expect(JSON.stringify(vi.mocked(trackServerEvent).mock.calls)).not.toContain("v1.1800000000.test");
+  });
 });

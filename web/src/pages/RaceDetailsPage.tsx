@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FormPanel } from "../components/FormPanel";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -37,6 +37,11 @@ function formatDivisionLabel(value: Division): string {
 }
 
 export function RaceDetailsPage() {
+  // Capture only in memory; remove the fragment before passive analytics effects.
+  const restoreToken = useRef(new URLSearchParams(window.location.hash.slice(1)).get("rt") ?? undefined);
+  useLayoutEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryMode = searchParams.get("mode") as "target" | "analyse" | null;
@@ -51,7 +56,7 @@ export function RaceDetailsPage() {
     queryMode ?? (draft?.calculatorMode as "target" | "analyse" | undefined) ?? "analyse",
   );
   const [name, setName] = useState(normalizeName(draft?.athlete?.name ?? null) ?? "");
-  const [gender, setGender] = useState<"male" | "female" | "mixed">(draft?.athlete?.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female" | "mixed" | "">(draft?.athlete?.gender ?? "male");
   const [ageGroup, setAgeGroup] = useState(
     normalizeAgeGroup(draft?.athlete?.ageGroup) ?? ageGroupFromAge(draft?.athlete?.ageOnRaceDay) ?? "",
   );
@@ -101,8 +106,8 @@ export function RaceDetailsPage() {
           : undefined;
   const isFormValid =
     calculatorMode === "analyse"
-      ? Boolean(ageGroup && parsedFinishTime !== null && !targetFinishTimeIssue)
-      : Boolean(ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && !targetFinishTimeIssue);
+      ? Boolean(gender && ageGroup && parsedFinishTime !== null && !targetFinishTimeIssue)
+      : Boolean(gender && ageGroup && parsedFinishTime !== null && parsedTargetFinishTime !== null && !targetFinishTimeIssue);
   const targetFinishTimeInlineIssue = targetFinishTime ? targetFinishTimeIssue : undefined;
   const isTargetMode = calculatorMode === "target";
   const benefits: [string, string][] = isTargetMode
@@ -156,12 +161,18 @@ export function RaceDetailsPage() {
     if (!restoreSubmissionId) return;
     let cancelled = false;
     setRestoreMessage("Restoring your HYROX result...");
-    fetchHyroxSubmissionDraft(restoreSubmissionId)
-      .then(({ draft: restored, analysisSummary }) => {
+    const request = restoreToken.current
+      ? fetchHyroxSubmissionDraft(restoreSubmissionId, restoreToken.current)
+      : fetchHyroxSubmissionDraft(restoreSubmissionId);
+    request
+      .then(({ draft: restored, analysisSummary, restoredScope }) => {
         if (cancelled) return;
         const restoredMode = queryMode ?? restored.calculatorMode ?? "target";
         saveDraft({
           ...restored,
+          ...(restoredScope === "race_only" ? { athlete: undefined, athleteContext: undefined, performanceContext: undefined } : {}),
+          marketingConsent: false,
+          appLinkConsent: false,
           calculatorMode: restoredMode,
           ...(isEmailTargetBranch || isPostAnalysisBranch
             ? {
@@ -175,7 +186,7 @@ export function RaceDetailsPage() {
         });
         setCalculatorMode(restoredMode);
         setName(normalizeName(restored.athlete?.name ?? null) ?? "");
-        setGender(restored.athlete?.gender ?? "male");
+        setGender(restoredScope === "race_only" ? "" : restored.athlete?.gender ?? "male");
         setAgeGroup(
           normalizeAgeGroup(restored.athlete?.ageGroup) ?? ageGroupFromAge(restored.athlete?.ageOnRaceDay) ?? "",
         );
@@ -191,7 +202,9 @@ export function RaceDetailsPage() {
         );
         setImportSucceeded(true);
         setRestoreMessage(
-          isPostAnalysisBranch
+          restoredScope === "race_only"
+            ? "We've restored your race. Please re-enter your details."
+            : isPostAnalysisBranch
             ? analysisSummary?.limiterLabel
               ? `Your race data from this analysis has been loaded. Your biggest opportunity was ${analysisSummary.limiterLabel}${
                   analysisSummary.potentialGainSeconds
@@ -213,6 +226,7 @@ export function RaceDetailsPage() {
   function validate(): boolean {
     const errs: Record<string, string> = {};
 
+    if (!gender) errs.gender = "Select your gender.";
     if (!ageGroup) {
       errs.ageGroup = "Select your age group.";
     }
@@ -318,7 +332,7 @@ export function RaceDetailsPage() {
 
   function handleNext() {
     if (!validate()) return;
-    if (!isFormValid) return;
+    if (!isFormValid || !gender) return;
 
     const finishSeconds = parseTimeToSeconds(finishTime) ?? 0;
     const parsedTarget = parseTimeToSeconds(targetFinishTime);
@@ -326,6 +340,7 @@ export function RaceDetailsPage() {
     const updated: Partial<HyroxCalculatorDraft> = {
       calculatorMode,
       athlete: {
+        ...draft?.athlete,
         name: normalizeName(name) ?? undefined,
         gender,
         ageGroup,

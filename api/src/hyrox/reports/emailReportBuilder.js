@@ -1082,7 +1082,7 @@ function buildCtaCopy(calculatorMode, primaryCategory) {
   return `Use ${app} to turn this analysis into ${brand.variant === "200days" ? "your" : "the"} next race-profile decision.`;
 }
 
-function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = "target") {
+function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = "target", restoreToken = null) {
   const appBaseUrl = (process.env.FORMA_APP_BASE_URL ?? process.env.FORMA_CTA_URL ?? getBrand().siteUrl).replace(/\/$/, "");
   const baseUrl = getBrand().siteUrl;
   const submissionId = analysisJson.submissionId ?? null;
@@ -1091,7 +1091,7 @@ function renderCta(section, analysisJson = {}, ctaCopy = null, calculatorMode = 
   const bodyText = esc(enforceTone(rawContent));
   const targetParams = new URLSearchParams({ mode: "target", source: "email" });
   if (submissionId) targetParams.set("submissionId", submissionId);
-  const targetCtaUrl = `${appBaseUrl}/hyrox-calculator/race-details?${targetParams.toString()}`;
+  const targetCtaUrl = `${appBaseUrl}/hyrox-calculator/race-details?${targetParams.toString()}${restoreToken ? `#rt=${encodeURIComponent(restoreToken)}` : ""}`;
   const primaryCtaLabel = calculatorMode === "target"
     ? "Want to work towards a different target time?"
     : "Want to work towards a target time?";
@@ -3000,7 +3000,7 @@ function renderMuscleGroupSection(section, analysisJson = {}) {
   </tr>`;
 }
 
-function renderSection(section, analysisJson, interpretation = null, calculatorMode = "target", contract = null) {
+function renderSection(section, analysisJson, interpretation = null, calculatorMode = "target", contract = null, restoreToken = null) {
   const SUPPRESSED_IN_EMAIL = new Set([
     "executive_summary",
     "race_snapshot",
@@ -3023,7 +3023,7 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
     case "recommended_focus_areas":
       return renderRecommendations(section, analysisJson);
     case "cta":
-      return renderCta(section, analysisJson, buildCtaCopy(calculatorMode, interpretation?.primaryThesis?.category), calculatorMode);
+      return renderCta(section, analysisJson, buildCtaCopy(calculatorMode, interpretation?.primaryThesis?.category), calculatorMode, restoreToken);
     case "race_snapshot":
       return "";
     case "penalty_callout":
@@ -3039,7 +3039,7 @@ function renderSection(section, analysisJson, interpretation = null, calculatorM
   }
 }
 
-export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null, submissionId = null) {
+export function buildEmailReport(personalReport = { sections: [] }, analysisJson = {}, athleteContext = {}, interpretation = null, calculatorMode = "target", contract = null, submissionId = null, restoreToken = null) {
   const narrative = ensureHyroxReportContract({ analysisJson, athleteContext, calculatorMode, contract });
   const reportOpportunity = narrative.sourceOpportunity ?? opportunityFraming(analysisJson);
   const canonicalPrimaryOpportunity = narrative.primaryClaim;
@@ -3186,7 +3186,7 @@ export function buildEmailReport(personalReport = { sections: [] }, analysisJson
     .map((section) => `${section.title}\n${contentText(section.content)}`)
     .join("\n\n");
   const textBody = enforceTone(`${greeting}\n\n${textSections}`);
-  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation, calculatorMode, narrative)).join("");
+  const sectionRows = sections.map((section) => renderSection(section, analysisJson, interpretation, calculatorMode, narrative, restoreToken)).join("");
   const outerTableStyle = inlineStyle({
     width: "100%",
     "border-collapse": "collapse",

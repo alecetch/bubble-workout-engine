@@ -105,7 +105,7 @@ import { makeImportUrlHandler } from "./src/hyrox/hyroxImportController.js";
 import { hyroxCarouselHandler } from "./src/hyrox/hyroxCarouselController.js";
 import { hyroxRaceCardHandler } from "./src/hyrox/hyroxRaceCardController.js";
 import { sharePackHandlers } from "./src/hyrox/hyroxSharePackController.js";
-import { createHyroxSubmissionDraftHandler } from "./src/hyrox/hyroxSubmissionDraftController.js";
+import { createHyroxSubmissionDraftHandler, createHyroxSubmissionDraftLimiter } from "./src/hyrox/hyroxSubmissionDraftController.js";
 import { createHyroxCalculatorEventsRouter } from "./src/routes/hyroxCalculatorEvents.js";
 import { createHyroxDownloadRedirectRouter } from "./src/routes/hyroxDownloadRedirect.js";
 import { createHyroxOnboardingPrefillRouter } from "./src/routes/hyroxOnboardingPrefill.js";
@@ -552,7 +552,7 @@ app.post("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLi
 app.use("/api/hyrox/download-redirect", createHyroxDownloadRedirectRouter(pool));
 app.post("/api/hyrox/predict", predict);
 app.post("/api/hyrox/import-url", hyroxImportRateLimiter, makeImportUrlHandler(pool));
-app.get("/api/hyrox/submission-draft/:submissionId", createHyroxSubmissionDraftHandler(pool));
+app.get("/api/hyrox/submission-draft/:submissionId", createHyroxSubmissionDraftLimiter(), createHyroxSubmissionDraftHandler(pool));
 app.get("/api/hyrox/health", hyroxController.health);
 app.get("/hyrox/carousel/:submissionId", hyroxCarouselHandler);
 app.get("/api/hyrox/carousel/:submissionId", hyroxCarouselHandler);

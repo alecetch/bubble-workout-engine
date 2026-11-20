@@ -1,3 +1,4 @@
+import { verifyRestoreToken, _resetForTest } from "../src/hyrox/restoreToken.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { analyse, submissionInput } from "../src/hyrox/hyroxController.js";
@@ -154,8 +155,22 @@ test("POST /api/hyrox/analyse response keys are unchanged by app link consent", 
     "muscleGroupProfile",
     "reason",
     "reportSentTo",
+    "restoreToken",
     "status",
     "submissionId",
   ].sort());
 });
 
+
+test("analyse response issues a token for that submission", async () => {
+  const original = process.env.JWT_SECRET;
+  try {
+    process.env.JWT_SECRET = "analyse-restore-test"; _resetForTest();
+    const { response } = await runAnalyseWithMockPool(validRequestBody());
+    assert.equal(response.statusCode, 200);
+    assert.equal(verifyRestoreToken(response.jsonBody.restoreToken, response.jsonBody.submissionId), true);
+  } finally {
+    if (original === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = original;
+    _resetForTest();
+  }
+});
