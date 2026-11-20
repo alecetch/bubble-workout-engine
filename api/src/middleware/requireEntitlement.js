@@ -28,7 +28,7 @@ export function makeRequireEntitlement(db = pool) {
 
       return next();
     } catch (err) {
-      return res.status(500).json({ ok: false, code: "internal_error", error: err.message });
+      return res.status(500).json({ ok: false, code: "internal_error", error: "Internal server error" });
     }
   };
 }

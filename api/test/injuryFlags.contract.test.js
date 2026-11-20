@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import { applyNarration } from "../engine/steps/05_applyNarration.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +14,7 @@ assert.equal(codes.length, INJURY_FLAG_OPTIONS.length, "Failed to parse mobile i
 assert.equal(labels.size, INJURY_FLAG_OPTIONS.length, "Failed to parse mobile injury labels");
 
 test("catalogue contraindications use known codes and cover every real flag", async t => {
-  try { await pool.query("SELECT 1"); } catch (e) { t.skip(`Postgres unavailable: ${e.code}`); return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const known = new Set(INJURY_FLAG_OPTIONS.map(x => x.code));
   const seen = new Set();
   for (const table of ["exercise_catalogue", "warmup_exercise", "cooldown_exercise"]) {
@@ -29,7 +30,7 @@ for (const { code, label } of INJURY_FLAG_OPTIONS) {
   for (const value of new Set([code, label, labels.get(code), code.replace(/_(spine|foot|elbow)$/, "_/_$1")])) {
     test(`filter contract: ${value}`, async t => {
       assert.deepEqual(normalizeInjuryFlags([value]), [code]);
-      try { await pool.query("SELECT 1"); } catch (e) { t.skip(`Postgres unavailable: ${e.code}`); return; }
+      if (!await dbAvailableOrSkip(t, pool)) return;
       const equipment = (await pool.query("SELECT exercise_slug FROM equipment_items")).rows.map(r => r.exercise_slug);
       const filters = { fitness_rank: 3, equipment_items_slugs: equipment };
       const warmupCatalog = (await pool.query("SELECT * FROM warmup_exercise")).rows;

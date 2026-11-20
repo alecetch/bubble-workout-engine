@@ -1,13 +1,14 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
 import { trainingProgram, transactionalPool } from "../testSupport/trainingFixtures.js";
 import { createTrainingSessionHandlers } from "../src/routes/trainingSessions.js";
 import { getYearProgress } from "../src/services/yearProgress.js";
 
 after(closeDb);
 const clock = new Date("2026-11-03T00:30:00Z");
-const skip = { skip: DATABASE_SKIP };
 async function fixture(fn, now = clock) {
   return withUsers(async (db, [user, other]) => {
     await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = ANY($1::uuid[])", [[user, other]]);
@@ -29,7 +30,9 @@ async function fixture(fn, now = clock) {
   });
 }
 
-test("manual log counts once, upserts in place and earns milestones only once", skip, () => fixture(async ({ post, progress, request }) => {
+test("manual log counts once, upserts in place and earns milestones only once", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post, progress, request }) => {
   const first = await post();
   assert.equal(first.status, 201);
   const body = await first.json();
@@ -46,9 +49,12 @@ test("manual log counts once, upserts in place and earns milestones only once", 
   const after = await progress();
   assert.equal(after.count, 0);
   assert.equal(after.milestones[0].slug, "day_1");
-}));
+});
+});
 
-test("manual and in-app sessions share a training day; deleting manual keeps the in-app day", skip, () => fixture(async ({ db, user, post, request, progress }) => {
+test("manual and in-app sessions share a training day; deleting manual keeps the in-app day", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, user, post, request, progress }) => {
   const program = await trainingProgram(db, user);
   const row = (await db.query("INSERT INTO training_session (user_id,program_day_id,source,local_date) VALUES ($1,$2,'program_day','2026-11-03') RETURNING id", [user, program.days[0]])).rows[0];
   const body = await (await post()).json();
@@ -56,9 +62,12 @@ test("manual and in-app sessions share a training day; deleting manual keeps the
   assert.equal((await request("DELETE", `/${row.id}`)).status, 404);
   assert.equal((await request("DELETE", `/${body.session.id}`)).status, 204);
   assert.equal((await progress()).count, 1);
-}));
+});
+});
 
-test("manual routes require authentication, isolate owners and ignore client-supplied user IDs", skip, () => fixture(async ({ post, request, user, other }) => {
+test("manual routes require authentication, isolate owners and ignore client-supplied user IDs", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post, request, user, other }) => {
   assert.equal((await post({}, null)).status, 401);
   assert.equal((await request("GET", "", undefined, null)).status, 401);
   assert.equal((await request("DELETE", "/00000000-0000-0000-0000-000000000000", undefined, null)).status, 401);
@@ -67,9 +76,12 @@ test("manual routes require authentication, isolate owners and ignore client-sup
   assert.deepEqual((await (await request("GET", "", undefined, other)).json()).sessions, []);
   assert.equal((await (await request("GET", "", undefined, user)).json()).sessions.length, 1);
   assert.equal((await request("DELETE", "/invalid")).status, 404);
-}));
+});
+});
 
-test("validation rejects unknown activities, noninteger/out-of-range durations and dates outside today/yesterday without writes", skip, () => fixture(async ({ post, progress }) => {
+test("validation rejects unknown activities, noninteger/out-of-range durations and dates outside today/yesterday without writes", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post, progress }) => {
   for (const [input, code] of [
     [{ activity_type: "walking" }, "invalid_activity_type"], [{ activity_type: null }, "invalid_activity_type"],
     ...[19, 301, 20.5, "40", null].map(duration_min => [{ duration_min }, "invalid_duration"]),
@@ -81,9 +93,12 @@ test("validation rejects unknown activities, noninteger/out-of-range durations a
   }
   assert.equal((await progress()).count, 0);
   assert.equal((await post({ duration_min: 20, local_date: "2026-11-02" })).status, 201);
-}));
+});
+});
 
-test("GET filters the caller's manual rows by year and orders newest first", skip, () => fixture(async ({ post, request, db, user }) => {
+test("GET filters the caller's manual rows by year and orders newest first", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post, request, db, user }) => {
   await post({ local_date: "2026-11-02" });
   await post();
   await db.query("INSERT INTO training_session (user_id,local_date,source,activity_type,duration_min) VALUES ($1,'2025-12-31','manual','swim',45)", [user]);
@@ -93,21 +108,30 @@ test("GET filters the caller's manual rows by year and orders newest first", ski
   for (const query of ["?year=abc", "?year=1999", "?year=2028", "?year=2026&year=2025", "?source=program_day"]) {
     assert.equal((await request("GET", query)).status, 400);
   }
-}));
+});
+});
 
-test("timezone controls today/yesterday and is remembered", skip, () => fixture(async ({ post, db, user }) => {
+test("timezone controls today/yesterday and is remembered", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post, db, user }) => {
   const body = await (await post({ timezone: "Pacific/Honolulu" })).json();
   assert.equal(body.session.local_date, "2026-11-02");
   assert.equal((await post({ timezone: "Pacific/Honolulu", local_date: "2026-11-01" })).status, 201);
   assert.equal((await db.query("SELECT timezone FROM app_user WHERE id = $1", [user])).rows[0].timezone, "Pacific/Honolulu");
-}));
+});
+});
 
-test("Yesterday at New Year updates the selected prior year's progress", skip, () => fixture(async ({ post }) => {
+test("Yesterday at New Year updates the selected prior year's progress", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ post }) => {
   const body = await (await post({ local_date: "2026-12-31" })).json();
   assert.deepEqual(body.year_progress, { year: 2026, count: 1, target: 200 });
-}, new Date("2027-01-01T12:00:00Z")));
+}, new Date("2027-01-01T12:00:00Z"));
+});
 
-test("a milestone failure rolls back the manual log instead of leaving a partially saved day", skip, () => withUsers(async (db, [user]) => {
+test("a milestone failure rolls back the manual log instead of leaving a partially saved day", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async (db, [user]) => {
   const wrapped = transactionalPool(db);
   const queryable = { connect: async () => {
     const client = await wrapped.connect();
@@ -124,4 +148,5 @@ test("a milestone failure rolls back the manual log instead of leaving a partial
     assert.equal((await response.json()).code, "internal_error");
     assert.equal((await db.query("SELECT COUNT(*) FROM training_session WHERE user_id = $1", [user])).rows[0].count, "0");
   });
-}));
+});
+});

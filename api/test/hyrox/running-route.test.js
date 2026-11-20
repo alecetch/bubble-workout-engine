@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../helpers/requireDb.js";
 import { getBrand } from "../../src/config/brand.js";
 import { buildRunningProfilerEmail } from "../../src/hyrox/running/runningProfilerEmailService.js";
 import assert from "node:assert/strict";
@@ -7,10 +8,6 @@ import { pool } from "../../src/db.js";
 import { analyseRunningProfile } from "../../src/hyrox/running/runningProfilerAnalysisService.js";
 import { analyse, health } from "../../src/hyrox/running/runningController.js";
 import { runningIpRateLimiter, validateRunningSubmission } from "../../src/hyrox/running/runningValidator.js";
-
-const DB_SKIP = process.env.PGPASSWORD || process.env.DATABASE_URL
-  ? false
-  : "requires database connection (run inside Docker or set PGPASSWORD)";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -201,7 +198,9 @@ test("performanceTranslation.projectedHyroxSeconds is null when no HYROX goal su
 
 // ─── API route tests ─────────────────────────────────────────────────────────
 
-test("POST /api/running/analyse with valid 5k returns 200 with analysis", { skip: DB_SKIP }, async () => {
+test("POST /api/running/analyse with valid 5k returns 200 with analysis", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const app = buildApp();
   const { response, body } = await request(app, "/api/running/analyse", {
     method: "POST",
@@ -211,6 +210,7 @@ test("POST /api/running/analyse with valid 5k returns 200 with analysis", { skip
   assert.ok(body.submissionId);
   assert.ok(body.analysis);
   assert.ok(["high", "medium", "low"].includes(body.confidence));
+
 });
 
 test("missing email returns 400", async () => {
@@ -235,7 +235,9 @@ test("no performances returns 400", async () => {
   assert.equal(body.error, "validation_failed");
 });
 
-test("all historic performances returns 200 with confidence:low", { skip: DB_SKIP }, async () => {
+test("all historic performances returns 200 with confidence:low", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const app = buildApp();
   const { response, body } = await request(app, "/api/running/analyse", {
     method: "POST",
@@ -247,9 +249,12 @@ test("all historic performances returns 200 with confidence:low", { skip: DB_SKI
   });
   assert.equal(response.status, 200);
   assert.equal(body.confidence, "low");
+
 });
 
-test("submission row created in running_profiler_submissions", { skip: DB_SKIP }, async () => {
+test("submission row created in running_profiler_submissions", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const app = buildApp();
   const email = `db-test-${Date.now()}@example.com`;
   const { response, body } = await request(app, "/api/running/analyse", {
@@ -264,9 +269,12 @@ test("submission row created in running_profiler_submissions", { skip: DB_SKIP }
   );
   assert.equal(row.rows.length, 1);
   assert.equal(row.rows[0].email, email);
+
 });
 
-test("performance rows created in running_profiler_performances", { skip: DB_SKIP }, async () => {
+test("performance rows created in running_profiler_performances", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const app = buildApp();
   const email = `db-perf-${Date.now()}@example.com`;
   const { response, body } = await request(app, "/api/running/analyse", {
@@ -281,9 +289,12 @@ test("performance rows created in running_profiler_performances", { skip: DB_SKI
   );
   assert.ok(rows.rows.length >= 1, "Should have at least one performance row");
   assert.equal(rows.rows[0].distance, "5k");
+
 });
 
-test("analysis row created in running_profiler_analyses", { skip: DB_SKIP }, async () => {
+test("analysis row created in running_profiler_analyses", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const app = buildApp();
   const email = `db-analysis-${Date.now()}@example.com`;
   const { response, body } = await request(app, "/api/running/analyse", {
@@ -298,6 +309,7 @@ test("analysis row created in running_profiler_analyses", { skip: DB_SKIP }, asy
   );
   assert.ok(rows.rows.length >= 1, "Should have analysis row");
   assert.ok(["high", "medium", "low"].includes(rows.rows[0].confidence));
+
 });
 
 test("rate limit: 11th request within 1 hour returns 429", async () => {

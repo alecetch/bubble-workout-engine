@@ -1,9 +1,10 @@
+import { dbAvailableOrSkip } from "../../../test/helpers/requireDb.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { pool } from '../../db.js';
 import { runReferralRewards, startReferralRewardJob, shouldStartReferralRewardJob } from '../referralRewardJob.js';
-import { DATABASE_SKIP, closeDb } from '../../../testSupport/entitlementFixtures.js';
+import { closeDb } from '../../../testSupport/entitlementFixtures.js';
 test.after(closeDb);
 const now = new Date('2026-01-15T12:00:00Z');
 const day = 86400000;
@@ -42,7 +43,9 @@ async function fixture(fn) {
 }
 
 for (const scenario of ['trial', 'expired', 'existing promo', 'apple', 'google', 'cancelled', 'billing retry']) {
-  test(`reward method: ${scenario}`, { skip: DATABASE_SKIP }, () => fixture(async f => {
+  test(`reward method: ${scenario}`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
     let expected = 'promo', expiry = +now + 30 * day;
     if (scenario === 'trial') { await pool.query("UPDATE app_user SET subscription_status='trialing', trial_expires_at=$2 WHERE id=$1", [f.referrer, future]); expiry = Date.parse(future) + 30 * day; }
     if (scenario === 'expired') f.deps.fetchSubscriber = async () => subscriber({}, 'monthly', past);
@@ -64,10 +67,13 @@ for (const scenario of ['trial', 'expired', 'existing promo', 'apple', 'google',
     assert.equal(f.calls[2][1].transactional, true); assert.deepEqual(f.calls[2][1].data, { type: 'referral_reward' });
     await f.run(); assert.equal(f.calls.length, 3);
     assert.equal(result.failed, 0); assert.equal(f.logs[0].event, 'referral.reward.run');
-  }));
+  });
+});
 }
 
-test('two grants in rolling 12 months cap the third, but older grants do not', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('two grants in rolling 12 months cap the third, but older grants do not', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   await f.addRow('granted', new Date(+now - day));
   const second = await f.addRow('granted', new Date(+now - 400 * day));
   await pool.query('UPDATE referral_conversion SET reward_granted_at=$2 WHERE id=$1', [second.id, new Date(+now - day)]);
@@ -75,17 +81,23 @@ test('two grants in rolling 12 months cap the third, but older grants do not', {
   await pool.query("UPDATE referral_conversion SET reward_status='pending' WHERE id=$1", [f.row.id]);
   await pool.query('UPDATE referral_conversion SET reward_granted_at=$2 WHERE id=$1', [second.id, new Date(+now - 400 * day)]);
   assert.equal((await f.run()).granted_promotional, 1);
-}));
+});
+});
 
-test('deleted referrer is voided and future due rows wait', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('deleted referrer is voided and future due rows wait', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   await pool.query('UPDATE referral_conversion SET reward_next_attempt_at=$2 WHERE id=$1', [f.row.id, future]);
   await f.run(); assert.equal(f.calls.length, 0);
   await pool.query('UPDATE referral_conversion SET reward_next_attempt_at=$2 WHERE id=$1', [f.row.id, now]);
   await pool.query('DELETE FROM app_user WHERE id=$1', [f.referrer]);
   assert.equal((await f.run()).voided, 1); assert.equal((await f.read()).reward_last_error, 'referrer_deleted');
-}));
+});
+});
 
-for (const kind of ['temporary', 'apple ineligible', 'permanent store', 'permanent promo', 'missing key']) test(`failure: ${kind}`, { skip: DATABASE_SKIP }, () => fixture(async f => {
+for (const kind of ['temporary', 'apple ineligible', 'permanent store', 'permanent promo', 'missing key']) test(`failure: ${kind}`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   const error = (code, detail) => Object.assign(new Error('test'), { code, detail });
   if (kind === 'apple ineligible' || kind === 'permanent store') {
     f.deps.fetchSubscriber = async () => subscriber({ store: 'app_store', store_transaction_id: 'tx' });
@@ -103,21 +115,30 @@ for (const kind of ['temporary', 'apple ineligible', 'permanent store', 'permane
   await pool.query("UPDATE referral_conversion SET reward_due_at=$2, reward_next_attempt_at=$3 WHERE id=$1", [row.id, new Date(+now - 31 * day), now]);
   f.deps.grantPromotionalEntitlement = async () => { f.calls.push(['fallback']); return {}; };
   await f.run(); assert.equal((await f.read()).reward_status, 'granted'); assert.equal(f.calls[0][0], 'fallback');
-}));
+});
+});
 
-test('permanent fallback failure is failed', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('permanent fallback failure is failed', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   await pool.query('UPDATE referral_conversion SET reward_attempts=1, reward_due_at=$2 WHERE id=$1', [f.row.id, new Date(+now - 31 * day)]);
   f.deps.grantPromotionalEntitlement = async () => { throw Object.assign(new Error('no'), { code: 'revenuecat_permanent' }); };
   assert.equal((await f.run()).failed, 1); assert.equal((await f.read()).reward_status, 'failed');
-}));
+});
+});
 
-test('sync/push failures never regrant and unsuccessful push is not marked notified', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('sync/push failures never regrant and unsuccessful push is not marked notified', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   f.deps.syncUserEntitlement = async () => { throw Error('unavailable'); };
   f.deps.notificationService.send = async () => ({ sent: false, reason: 'no_channel' });
   await f.run(); await f.run(); assert.equal(f.calls.length, 1); assert.equal((await f.read()).reward_notified_at, null);
-}));
+});
+});
 
-test('concurrent runs over the same row grant once', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('concurrent runs over the same row grant once', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   let release, entered;
   const waiting = new Promise(resolve => { release = resolve; });
   const started = new Promise(resolve => { entered = resolve; });
@@ -125,7 +146,8 @@ test('concurrent runs over the same row grant once', { skip: DATABASE_SKIP }, ()
   const first = f.run(); await started;
   try { await f.run(); } finally { release(); }
   await first; assert.equal(f.calls.filter(x => x[0] === 'promo').length, 1);
-}));
+});
+});
 
 test('flag is exact and disabled scheduler never connects', () => {
   for (const value of [undefined, 'false', 'TRUE', '1', true]) {
@@ -162,20 +184,26 @@ test('busy advisory lock never claims rows or unlocks another run', async () => 
   assert.equal(queries.length, 1); assert.equal(released, true);
 });
 
-test('void and unconverted referrals never grant', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('void and unconverted referrals never grant', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   for (const status of ['none', 'void']) {
     await pool.query('UPDATE referral_conversion SET reward_status=$2 WHERE id=$1', [f.row.id, status]);
     await f.run(); assert.equal(f.calls.length, 0);
   }
-}));
+});
+});
 
-test('concurrent due rewards respect cap across different referred users', { skip: DATABASE_SKIP }, () => fixture(async f => {
+test('concurrent due rewards respect cap across different referred users', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   await f.addRow('granted', new Date(+now - day)); await f.addRow();
   await Promise.all([f.run(), f.run()]);
   const result = await pool.query("SELECT reward_status,COUNT(*)::int AS count FROM referral_conversion WHERE referrer_user_id=$1 GROUP BY reward_status", [f.referrer]);
   assert.deepEqual(Object.fromEntries(result.rows.map(r => [r.reward_status, r.count])), { granted: 2, capped: 1 });
   assert.equal(f.calls.filter(c => c[0] === 'promo').length, 1);
-}));
+});
+});
 
 for (const scenario of ["locked", "busy", "error"]) test(`heartbeat: ${scenario} run`, async t => {
   const heartbeats = [], results = []; let releases = 0;

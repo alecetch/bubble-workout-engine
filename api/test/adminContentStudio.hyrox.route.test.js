@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -33,21 +34,22 @@ async function request(app, path, options = {}) {
 }
 
 async function dbReady(t) {
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    t.skip("Postgres credentials are not configured for Content Studio HYROX route tests.");
-    return false;
-  }
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+
   const tables = await pool.query("SELECT to_regclass('public.cs_race_events') AS races");
   if (!tables.rows[0]?.races) {
+    if (process.env.REQUIRE_DB === "true") throw new Error("Content Studio migrations are not applied.");
     t.skip("Content Studio migrations are not applied.");
     return false;
   }
   const column = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'cs_race_events' AND column_name = 'scrape_meta_json'");
   if (!column.rows.length) {
+    if (process.env.REQUIRE_DB === "true") throw new Error("Content Studio V110 migration is not applied.");
     t.skip("Content Studio V110 migration is not applied.");
     return false;
   }
   return true;
+
 }
 
 test.after(async () => {

@@ -98,7 +98,7 @@ export function useSegmentTimer(params: UseSegmentTimerParams): UseSegmentTimerR
       const segmentRemaining = computeRemaining(segmentTotal, liveSegmentElapsed);
       const restRemaining = computeRemaining(restTotalEffective, liveRestElapsed);
 
-      if (entry.segmentIsRunning && segmentRemaining === 0 && !finishedSegmentRef.current) {
+      if (segmentTotal !== null && entry.segmentIsRunning && segmentRemaining === 0 && !finishedSegmentRef.current) {
         finishedSegmentRef.current = true;
         useTimerStore.getState().finishSegment(segmentId);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

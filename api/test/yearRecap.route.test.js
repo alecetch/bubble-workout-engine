@@ -1,11 +1,12 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
 import { trainingProgram } from "../testSupport/trainingFixtures.js";
 import { createYearRecapHandler, createYearProgressHandler } from "../src/routes/yearProgress.js";
 
 after(closeDb);
-const skip = { skip: DATABASE_SKIP };
 async function fixture(fn, clock = "2026-12-28T12:00:00Z") {
   return withUsers(async (db, [user, other]) => {
     await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC' WHERE id = ANY($1::uuid[])", [[user, other]]);
@@ -15,7 +16,9 @@ async function fixture(fn, clock = "2026-12-28T12:00:00Z") {
     });
   });
 }
-test("recap counts days separately from sessions, preserves earned clubs and counts real weight PRs in one query", skip, () => fixture(async ({ db, user, get }) => {
+test("recap counts days separately from sessions, preserves earned clubs and counts real weight PRs in one query", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, user, get }) => {
   for (const [date, weight, draft] of [["2025-12-31", 100, false], ["2026-09-30", 90, false], ["2026-10-01", 110, false], ["2026-10-02", 200, true]]) {
     const program = await trainingProgram(db, user);
     await db.query("UPDATE program_day SET scheduled_date = $2::date WHERE id = $1", [program.days[0], date]);
@@ -36,8 +39,11 @@ test("recap counts days separately from sessions, preserves earned clubs and cou
   assert.deepEqual(recap.best_month, { month: 10, count: 2 });
   assert.equal(recap.first_training_date, "2026-10-01");
   assert.deepEqual(recap.milestones, [{ slug: "club_200", reached_on: "2026-09-20" }]);
-}));
-test("recap is authenticated, available without an entitlement and scoped to the token", skip, () => fixture(async ({ db, user, other, get }) => {
+});
+});
+test("recap is authenticated, available without an entitlement and scoped to the token", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, user, other, get }) => {
   await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,'2026-01-01','apple_health')", [user]);
   assert.equal((await get("?year=2026", null)).status, 401);
   assert.equal((await (await get(`?year=2026&user_id=${other}`)).json()).count, 1);
@@ -49,8 +55,11 @@ test("recap is authenticated, available without an entitlement and scoped to the
   assert.equal(empty.busiest_weekday, null);
   assert.equal(empty.first_training_date, null);
   assert.equal(empty.longest_on_pace_weeks, 0);
-}));
-test("pre-join years return no_year, invalid inputs return 400 and current recap opens on local 28 December", skip, () => fixture(async ({ get }) => {
+});
+});
+test("pre-join years return no_year, invalid inputs return 400 and current recap opens on local 28 December", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ get }) => {
   const before = await get("?year=2019");
   assert.equal(before.status, 404);
   assert.equal((await before.json()).code, "no_year");
@@ -58,14 +67,20 @@ test("pre-join years return no_year, invalid inputs return 400 and current recap
   assert.equal((await get("?year=2026&timezone=Pacific/Honolulu")).status, 404);
   assert.equal((await get("?year=2026&timezone=Pacific/Kiritimati")).status, 200);
   assert.equal((await get("?year=2025")).status, 200);
-}, "2026-12-28T01:00:00Z"));
-test("current recap stays unavailable before December 28 but past years remain available", skip, () => fixture(async ({ get }) => {
+}, "2026-12-28T01:00:00Z");
+});
+test("current recap stays unavailable before December 28 but past years remain available", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ get }) => {
   const current = await get();
   assert.equal(current.status, 404);
   assert.equal((await current.json()).code, "recap_not_ready");
   assert.equal((await get("?year=2025")).status, 200);
-}, "2026-12-27T12:00:00Z"));
-test("year progress rolls over on local January 1 and retains last year's count and club", skip, () => withUsers(async (db, [user]) => {
+}, "2026-12-27T12:00:00Z");
+});
+test("year progress rolls over on local January 1 and retains last year's count and club", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async (db, [user]) => {
   await db.query("UPDATE app_user SET created_at='2020-01-01', timezone='Pacific/Kiritimati' WHERE id=$1", [user]);
   await db.query("INSERT INTO training_session (user_id,local_date,source) VALUES ($1,'2026-12-31','apple_health')", [user]);
   await db.query("INSERT INTO year_milestone (user_id,year,slug,threshold,reached_on) VALUES ($1,2026,'club_200',200,'2026-11-20')", [user]);
@@ -76,4 +91,5 @@ test("year progress rolls over on local January 1 and retains last year's count 
     assert.equal(body.count, 0);
     assert.deepEqual(body.years, [{ year: 2027, count: 0, target: 200, best_club: null }, { year: 2026, count: 1, target: 200, best_club: 200 }]);
   });
-}));
+});
+});

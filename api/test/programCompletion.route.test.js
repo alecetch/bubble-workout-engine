@@ -1,6 +1,7 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import express from "express";
 import jwt from "jsonwebtoken";
-import { pool, skip as databaseSkip, withAuthUser } from "../testSupport/authHardeningFixtures.js";
+import { pool, withAuthUser } from "../testSupport/authHardeningFixtures.js";
 import { trainingProgram } from "../testSupport/trainingFixtures.js";
 import { offsetLocalDate, localDateInZone } from "../src/services/trainingYear.js";
 import { makeRequireAuth } from "../src/middleware/requireAuth.js";
@@ -576,7 +577,9 @@ async function lapseFixture(fn, { finalOffset = -3, completed = [0], lastSession
   });
 }
 
-test("ended schedule includes the incomplete final session and closes with skips", { skip: databaseSkip }, () => lapseFixture(async f => {
+test("ended schedule includes the incomplete final session and closes with skips", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const check = await f.call("endCheck"); assert.equal(check.statusCode, 200);
   assert.equal(check.body.schedule_ended, true); assert.equal(check.body.can_complete_with_skips, true);
   assert.equal(check.body.last_scheduled_date, offsetLocalDate(f.today, -3)); assert.equal(check.body.missed_workouts_count, 2);
@@ -586,41 +589,62 @@ test("ended schedule includes the incomplete final session and closes with skips
   const row = (await pool.query("SELECT status,completed_mode,is_primary FROM program WHERE id=$1", [f.program.id])).rows[0];
   assert.deepEqual(row, { status: "completed", completed_mode: "with_skips", is_primary: false });
   assert.equal((await f.call("endCheck")).body.can_complete_with_skips, false);
-}));
-for (const finalOffset of [-1, 0, 2]) test(`final date offset ${finalOffset} retains the original completion guard`, { skip: databaseSkip }, () => lapseFixture(async f => {
+});
+});
+for (const finalOffset of [-1, 0, 2]) test(`final date offset ${finalOffset} retains the original completion guard`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const check = await f.call("endCheck"); assert.equal(check.body.schedule_ended, false); assert.equal(check.body.can_complete_with_skips, false);
   assert.equal(check.body.missed_workouts_count, 1);
   assert.equal((await f.call("completeProgram", { body: { mode: "with_skips" } })).statusCode, 400);
-}, { finalOffset }));
-test("second day after the final date is the first ended day", { skip: databaseSkip }, () => lapseFixture(async f => {
+}, { finalOffset });
+});
+test("second day after the final date is the first ended day", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   assert.equal((await f.call("endCheck")).body.schedule_ended, true);
-}, { finalOffset: -2 }));
-test("completed final session still permits skips inside the schedule", { skip: databaseSkip }, () => lapseFixture(async f => {
+}, { finalOffset: -2 });
+});
+test("completed final session still permits skips inside the schedule", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const check = await f.call("endCheck"); assert.equal(check.body.schedule_ended, false); assert.equal(check.body.can_complete_with_skips, true);
   assert.equal((await f.call("completeProgram", { body: { mode: "with_skips" } })).statusCode, 200);
-}, { finalOffset: 1, completed: [2] }));
-test("fully complete block uses as_scheduled and already-completed requests remain idempotent", { skip: databaseSkip }, () => lapseFixture(async f => {
+}, { finalOffset: 1, completed: [2] });
+});
+test("fully complete block uses as_scheduled and already-completed requests remain idempotent", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   assert.equal((await f.call("endCheck")).body.can_complete_with_skips, false);
   assert.equal((await f.call("completeProgram", { body: { mode: "as_scheduled" } })).statusCode, 200);
   const again = await f.call("completeProgram", { body: { mode: "with_skips" } });
   assert.equal(again.statusCode, 200); assert.equal(again.body.completed_mode, "as_scheduled");
-}, { completed: [0, 1, 2] }));
-test("rescheduled dates and skipped future sessions determine the actual schedule end", { skip: databaseSkip }, () => lapseFixture(async f => {
+}, { completed: [0, 1, 2] });
+});
+test("rescheduled dates and skipped future sessions determine the actual schedule end", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const newDate = offsetLocalDate(f.today, 4);
   await pool.query("UPDATE program_calendar_day SET scheduled_date=$2 WHERE program_day_id=$1", [f.program.days[2], newDate]);
   const check = await f.call("endCheck"); assert.equal(check.body.last_scheduled_date, newDate); assert.equal(check.body.schedule_ended, false);
   await pool.query("UPDATE program_day SET is_skipped=true WHERE id=$1", [f.program.days[2]]);
   const skipped = await f.call("endCheck"); assert.equal(skipped.body.schedule_ended, true);
   assert.equal(skipped.body.last_scheduled_date, offsetLocalDate(f.today, -4)); assert.equal(skipped.body.missed_workouts_count, 1);
-}));
-for (const offset of [1, -3]) test(`all three completion routes validate local_date offset ${offset}`, { skip: databaseSkip }, () => lapseFixture(async f => {
+});
+});
+for (const offset of [1, -3]) test(`all three completion routes validate local_date offset ${offset}`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const local_date = offsetLocalDate(f.today, offset);
   for (const method of ["endCheck", "completionSummary", "completeProgram"]) {
     const result = await f.call(method, { query: { local_date }, body: { mode: "with_skips", local_date } });
     assert.equal(result.statusCode, 400); assert.equal(result.body.code, "validation_error");
   }
-}));
-test("omitted date uses the stored timezone and yesterday remains an accepted grace date", { skip: databaseSkip }, async t => {
+});
+});
+test("omitted date uses the stored timezone and yesterday remains an accepted grace date", async t => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-05-01T23:30:00Z") });
   await lapseFixture(async f => {
     await pool.query("UPDATE app_user SET timezone='Pacific/Kiritimati' WHERE id=$1", [f.id]);
@@ -628,8 +652,11 @@ test("omitted date uses the stored timezone and yesterday remains an accepted gr
     assert.equal((await f.call("endCheck", { query: { local_date: "2026-05-01" } })).body.schedule_ended, false);
     assert.equal(check.body.days_since_last_session, 6);
   }, { finalOffset: -1 });
+
 });
-for (const days of [5, 20, 21, 25, null]) test(`rank suggestion after ${days} days since a program session`, { skip: databaseSkip }, () => lapseFixture(async f => {
+for (const days of [5, 20, 21, 25, null]) test(`rank suggestion after ${days} days since a program session`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   await pool.query(`INSERT INTO exercise_progression_state(user_id,program_type,exercise_id,progression_group_key,last_outcome,confidence)
     VALUES ($1,'strength','bb_back_squat','lapse-test','increase_load','high')`, [f.id]);
   await pool.query("INSERT INTO training_session(user_id,local_date,source,activity_type,duration_min) VALUES ($1,$2,'manual','run',30)", [f.id, f.today]);
@@ -638,8 +665,11 @@ for (const days of [5, 20, 21, 25, null]) test(`rank suggestion after ${days} da
   assert.equal(result.body.lapsed, lapsed); assert.equal(result.body.days_since_last_session, days);
   assert.equal(result.body.suggested_next_rank, lapsed ? 1 : 2);
   assert.equal(result.body.re_enrollment_options.some(option => option.option === "progress_level"), !lapsed);
-}, { lastSessionOffset: days === null ? null : -days }));
-test("all three routes require auth and hide another user's program", { skip: databaseSkip }, () => lapseFixture(async f => {
+}, { lastSessionOffset: days === null ? null : -days });
+});
+test("all three routes require auth and hide another user's program", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return lapseFixture(async f => {
   const app = express(); app.use(express.json());
   const secret = "program-lapse-test-secret";
   app.use(makeRequireAuth(secret, "lapse-test", { getPasswordChangedAt: async () => null }));
@@ -656,4 +686,5 @@ test("all three routes require auth and hide another user's program", { skip: da
       assert.equal((await fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } })).status, 404);
     }
   } finally { await new Promise(resolve => server.close(resolve)); }
-}));
+});
+});

@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -5,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { MemoryStore } from "express-rate-limit";
 import { marketingRouter, createDeleteAccountHandler, createDeleteAccountLimiter } from "../src/routes/marketingPages.js";
 import { makeAccountDeletionService } from "../src/services/accountDeletionService.js";
-import { pool, skip, log, withDeletionUser, accountCounts } from "../testSupport/accountDeletionFixtures.js";
+import { pool, log, withDeletionUser, accountCounts } from "../testSupport/accountDeletionFixtures.js";
 test.after(() => pool.end());
 
 async function withServer(app, fn) {
@@ -39,7 +40,9 @@ test("public GET is ungated, noindex and contains ownership/consent and subscrip
   } finally { if (previous === undefined) delete process.env.MARKETING_PREVIEW_ENABLED; else process.env.MARKETING_PREVIEW_ENABLED = previous; }
 });
 
-test("valid web credentials delete the account and show the subscription reminder", { skip }, () => withDeletionUser(async user => {
+test("valid web credentials delete the account and show the subscription reminder", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+return withDeletionUser(async user => {
   const accountDeletion = makeAccountDeletionService({ db: pool, log, deletePrefixFn: async () => ({ deleted: 2 }), deleteSubscriberFn: async () => ({ skipped: true }) });
   await withServer(appFor({ db: pool, accountDeletion }), async (_url, post) => {
     const result = await post({ email: ` ${user.email.toUpperCase()} `, password: user.password, confirm: "on" });
@@ -47,9 +50,12 @@ test("valid web credentials delete the account and show the subscription reminde
     assert.match(result.body, /does not cancel a store subscription/);
     assert.deepEqual(await accountCounts(user.id), [0, 0, 0]);
   });
-}));
+});
+});
 
-test("wrong and unknown credentials have identical responses and compare exactly once each", { skip }, () => withDeletionUser(async user => {
+test("wrong and unknown credentials have identical responses and compare exactly once each", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+return withDeletionUser(async user => {
   const comparisons = [];
   const app = appFor({ db: pool, accountDeletion: { deleteAccount: () => assert.fail("no deletion") }, compare: async (password, hash) => {
     comparisons.push(hash); return bcrypt.compare(password, hash);
@@ -63,7 +69,8 @@ test("wrong and unknown credentials have identical responses and compare exactly
     assert.deepEqual(await accountCounts(user.id), [1, 1, 1]);
     assert.ok(!wrong.body.includes(user.email));
   });
-}));
+});
+});
 
 test("missing fields or unticked confirm return validation errors without a lookup", async () => {
   let comparisons = 0;
@@ -75,7 +82,9 @@ test("missing fields or unticked confirm return validation errors without a look
   });
 });
 
-test("an account without a password can never authenticate against the dummy hash", { skip }, () => withDeletionUser(async user => {
+test("an account without a password can never authenticate against the dummy hash", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+return withDeletionUser(async user => {
   await pool.query("UPDATE app_user SET password_hash=NULL WHERE id=$1", [user.id]);
   let comparisons = 0;
   await withServer(appFor({ db: pool, compare: async () => { comparisons++; return true; }, accountDeletion: { deleteAccount: () => assert.fail("No password credential exists") } }), async (_url, post) => {
@@ -83,16 +92,20 @@ test("an account without a password can never authenticate against the dummy has
     assert.equal(result.status, 400); assert.match(result.body, /email and password don/);
     assert.equal(comparisons, 1); assert.deepEqual(await accountCounts(user.id), [1, 1, 1]);
   });
-}));
+});
+});
 
-test("storage failure renders a retry page and leaves all account rows intact", { skip }, () => withDeletionUser(async user => {
+test("storage failure renders a retry page and leaves all account rows intact", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+return withDeletionUser(async user => {
   const accountDeletion = makeAccountDeletionService({ db: pool, log, deletePrefixFn: async () => { throw Error("offline"); } });
   await withServer(appFor({ db: pool, accountDeletion }), async (_url, post) => {
     const result = await post({ email: user.email, password: user.password, confirm: "on" });
     assert.equal(result.status, 503); assert.match(result.body, /Nothing was removed/); assert.match(result.body, /few minutes, or email support/);
     assert.deepEqual(await accountCounts(user.id), [1, 1, 1]);
   });
-}));
+});
+});
 
 test("sixth POST is IP-limited with a rendered page", async () => {
   let comparisons = 0;

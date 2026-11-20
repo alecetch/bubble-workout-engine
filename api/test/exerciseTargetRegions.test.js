@@ -1,10 +1,10 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../src/db.js";
 
 async function ensureDb(t) {
-  try { await pool.query("SELECT 1"); return true; }
-  catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return false; }
+  return dbAvailableOrSkip(t, pool);
 }
 const vocabulary = new Set(["arms","biceps","calves","cardio","chest","core","glutes","grip","hamstrings","lats","quads","rear_delts","shoulders","triceps","upper_back"]);
 

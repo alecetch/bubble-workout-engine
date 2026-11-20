@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import { INJURY_FLAG_OPTIONS } from "../src/utils/injuryFlags.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,8 +10,7 @@ after(() => pool.end());
 
 for (const { code, label } of INJURY_FLAG_OPTIONS.filter(x => x.code !== 'no_known_issues')) {
 test(`generation for ${label} persists no contraindicated exercise or bookend`, async t => {
-  try { await pool.query('SELECT 1'); }
-  catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const subject = `injury-test-${randomUUID()}`;
   const user = (await pool.query('INSERT INTO app_user(subject_id) VALUES ($1) RETURNING id', [subject])).rows[0];
   try {

@@ -1,14 +1,17 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { pool, skip, log, withAuthUser } from '../testSupport/authHardeningFixtures.js';
+import { pool, log, withAuthUser } from '../testSupport/authHardeningFixtures.js';
 process.env.JWT_SECRET ??= 'login-throttle-test-secret-at-least-32-characters';
 process.env.JWT_ISSUER ??= 'login-throttle-tests';
 const { authRouter } = await import('../src/routes/auth.js');
 const { accountKeyForEmail } = await import('../src/services/authThrottle.js');
 test.after(()=>pool.end());
 
-test('password failures are shared across IPs for known and unknown accounts and expire by window', {skip},()=>withAuthUser(async user=>withAuthUser(async other=>{
+test('password failures are shared across IPs for known and unknown accounts and expire by window',async (t)=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return withAuthUser(async user=>withAuthUser(async other=>{
   const app=express();app.set('trust proxy',1);app.use(express.json());app.use((req,_res,next)=>{req.log=log;next();});app.use('/api/auth',authRouter);
   const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   const login=async(email,password,ip)=>{const res=await fetch(`http://127.0.0.1:${server.address().port}/api/auth/login`,{method:'POST',headers:{'content-type':'application/json','x-forwarded-for':ip},body:JSON.stringify({email,password})});return {status:res.status,body:await res.json()};};
@@ -24,4 +27,5 @@ test('password failures are shared across IPs for known and unknown accounts and
     assert.equal((await pool.query('SELECT hits FROM rate_limit_hit WHERE key=$1',[accountKeyForEmail(unknown)])).rows[0].hits,10);
     assert.ok(!JSON.stringify((await pool.query('SELECT key FROM rate_limit_hit')).rows).includes(unknown));
   } finally {await new Promise(resolve=>server.close(resolve));await pool.query('DELETE FROM rate_limit_hit WHERE key=$1',[accountKeyForEmail(unknown)]);}
-})));
+}));
+});

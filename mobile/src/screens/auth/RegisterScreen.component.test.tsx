@@ -327,4 +327,12 @@ describe("RegisterScreen", () => {
       expect(getAppStorageMock).toHaveBeenCalled();
     });
   });
+  it("shows the server's 400 validation message and enables registration again", async () => {
+    apiRegisterMock.mockRejectedValueOnce(new ApiError(400, "Password must be 8 to 72 characters", { code: "validation_error" }));
+    renderScreen(); fillRegistration();
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByText("Password must be 8 to 72 characters")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
+    expect(saveTokensMock).not.toHaveBeenCalled();
+  });
 });

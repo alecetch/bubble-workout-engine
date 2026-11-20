@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -11,7 +12,6 @@ import { makeRequirePremium } from "../src/middleware/requirePremium.js";
 import { requirePhysiqueEnabled } from "../src/middleware/requirePhysiqueEnabled.js";
 import { createPhysiqueReadRouter, createCheckInSubmitHandler, createTriggerAnalysisHandler, uploadSingle } from "../src/routes/physiqueCheckIn.js";
 import { createScanSubmitHandler } from "../src/routes/physiqueScan.js";
-const dbOptions = { skip: !process.env.PGPASSWORD && !process.env.DATABASE_URL ? "requires test database" : false };
 let previous;
 beforeEach(() => { previous=process.env.PHYSIQUE_ENABLED; delete process.env.PHYSIQUE_ENABLED; });
 afterEach(() => { if (previous===undefined) delete process.env.PHYSIQUE_ENABLED; else process.env.PHYSIQUE_ENABLED=previous; });
@@ -53,7 +53,9 @@ async function request(instance,uid,path,{method="POST",photo=false,invalidPhoto
   } finally {await new Promise(resolve=>server.close(resolve));}
 }
 const paths=id=>["/api/physique/check-in",`/api/physique/check-ins/${id}/analyse`,"/api/physique/scan","/api/physique/consent"];
-test("disabled writes return the exact 404 before parsing uploads or changing data",dbOptions,async t=>{
+test("disabled writes return the exact 404 before parsing uploads or changing data",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const id=await checkIn(uid);const calls={storage:0,analysis:0,scan:0};const instance=app(calls);
   for (const flag of [undefined,"false","TRUE"]) {
     if(flag===undefined) delete process.env.PHYSIQUE_ENABLED; else process.env.PHYSIQUE_ENABLED=flag;
@@ -67,11 +69,14 @@ test("disabled writes return the exact 404 before parsing uploads or changing da
   assert.equal((await pool.query("SELECT id FROM physique_check_in WHERE user_id=$1",[uid])).rowCount,1);
   assert.equal((await pool.query("SELECT id FROM physique_scan WHERE user_id=$1",[uid])).rowCount,0);
   assert.equal((await pool.query("SELECT physique_consent_at FROM app_user WHERE id=$1",[uid])).rows[0].physique_consent_at,null);
+
 });
 test("auth runs before the disabled feature gate",async()=>{
   for(const path of paths(randomUUID())) assert.equal((await request(app(),null,path)).status,401,path);
 });
-test("existing check-ins can be listed and deleted only by their owner while disabled",dbOptions,async t=>{
+test("existing check-ins can be listed and deleted only by their owner while disabled",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const a=await user(t);const b=await user(t);const own=await checkIn(a);const foreign=await checkIn(b);const instance=app();
   const listed=await request(instance,a,"/api/physique/check-ins",{method:"GET"});
   assert.equal(listed.status,200);assert.deepEqual(listed.body.check_ins.map(row=>row.id),[own]);
@@ -79,8 +84,11 @@ test("existing check-ins can be listed and deleted only by their owner while dis
   assert.equal((await pool.query("SELECT id FROM physique_check_in WHERE id=$1",[foreign])).rowCount,1);
   assert.equal((await request(instance,a,`/api/physique/check-ins/${own}`,{method:"DELETE"})).status,200);
   assert.equal((await pool.query("SELECT id FROM physique_check_in WHERE id=$1",[own])).rowCount,0);
+
 });
-test("the same mounted routes resume existing behavior when enabled at request time",dbOptions,async t=>{
+test("the same mounted routes resume existing behavior when enabled at request time",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const calls={storage:0,analysis:0,scan:0};const instance=app(calls);
   process.env.PHYSIQUE_ENABLED="true";
   assert.equal((await request(instance,uid,"/api/physique/consent")).status,200);
@@ -90,6 +98,7 @@ test("the same mounted routes resume existing behavior when enabled at request t
   assert.deepEqual(calls,{storage:1,analysis:1,scan:1});
   delete process.env.PHYSIQUE_ENABLED;
   assert.equal((await request(instance,uid,"/api/physique/consent")).body.code,"feature_disabled");
+
 });
 test("server mounts each gate after auth and before multipart upload",()=>{
   const server=readFileSync(new URL("../server.js",import.meta.url),"utf8");
@@ -98,11 +107,14 @@ test("server mounts each gate after auth and before multipart upload",()=>{
   assert.match(server,/userAuth, requirePhysiqueEnabled, requirePremium, uploadSingle, handleScanSubmit/);
 });
 
-test("authenticated users without entitlement also see feature_disabled while off",dbOptions,async t=>{
+test("authenticated users without entitlement also see feature_disabled while off",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);
   await pool.query("UPDATE app_user SET subscription_status='expired', trial_expires_at=now()-interval '1 day' WHERE id=$1",[uid]);
   for(const path of paths(randomUUID())) {
     const result=await request(app(),uid,path);
     assert.equal(result.status,404,path);assert.equal(result.body.code,"feature_disabled");
   }
+
 });

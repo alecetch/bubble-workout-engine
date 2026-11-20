@@ -1,9 +1,11 @@
+import { pool as requiredDbPool } from "../../db.js";
+import { dbAvailableOrSkip } from "../../../test/helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReferralCodeHandler, createReferralStatsHandler } from "../referral.js";
 import { getBrand } from '../../config/brand.js';
 import { randomUUID } from 'node:crypto';
-import { DATABASE_SKIP, closeDb, withUsers } from '../../../testSupport/entitlementFixtures.js';
+import { closeDb, withUsers } from '../../../testSupport/entitlementFixtures.js';
 test.after(closeDb);
 
 function mockRes() {
@@ -107,7 +109,9 @@ test('referral handlers reject missing authentication', async () => {
   }
 });
 
-test('stats count own statuses, exclude void conversions, and enforce rolling cap', { skip: DATABASE_SKIP }, () => withUsers(async (db, [owner, other]) => {
+test('stats count own statuses, exclude void conversions, and enforce rolling cap', async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async (db, [owner, other]) => {
   for (const [status, months, user] of [['granted', 1, owner], ['granted', 13, owner], ['pending', null, owner], ['capped', null, owner], ['void', null, owner], ['none', null, owner], ['granted', 1, other]]) {
     const id = randomUUID();
     await db.query("INSERT INTO app_user(id,subject_id,email) VALUES ($1::uuid,$1::text,$2)", [id, `${id}@example.test`]);
@@ -116,4 +120,5 @@ test('stats count own statuses, exclude void conversions, and enforce rolling ca
   }
   const res = mockRes(); await createReferralStatsHandler(db)({ auth: { user_id: owner } }, res);
   assert.deepEqual(res.body, { ok: true, totalReferrals: 6, conversions: 4, rewardsGranted: 2, rewardsPending: 1, rewardsCapped: 1, rewardCapPerYear: 2, rewardsRemainingThisYear: 1 });
-}));
+});
+});

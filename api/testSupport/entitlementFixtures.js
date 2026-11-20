@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 import { pool } from "../src/db.js";
 import { makeRequireAuth } from "../src/middleware/requireAuth.js";
 
-export const DATABASE_SKIP = process.env.PGPASSWORD || process.env.DATABASE_URL ? false : "requires test database";
 export const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
 export const past = new Date(Date.now() - 30 * 86_400_000).toISOString();
 export const auth = makeRequireAuth("entitlement-test-secret-at-least-32-characters", "entitlement-tests");

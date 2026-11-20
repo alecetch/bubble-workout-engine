@@ -1,11 +1,11 @@
+import { dbAvailableOrSkip } from "../../../test/helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../db.js";
 
-const hasDbConfig = Boolean(process.env.DATABASE_URL || (process.env.PGHOST && process.env.PGUSER));
-const dbTest = hasDbConfig ? test : test.skip;
+test("no alias exercise_id exists after V81", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
 
-dbTest("no alias exercise_id exists after V81", async () => {
   const result = await pool.query(
     `SELECT exercise_id FROM exercise_catalogue
      WHERE exercise_id IN (
@@ -14,9 +14,12 @@ dbTest("no alias exercise_id exists after V81", async () => {
      )`
   );
   assert.equal(result.rows.length, 0, "All alias rows should have been deleted by V81");
+
 });
 
-dbTest("canonical rows exist for all cleaned pairs", async () => {
+test("canonical rows exist for all cleaned pairs", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const result = await pool.query(
     `SELECT exercise_id FROM exercise_catalogue
      WHERE exercise_id IN (
@@ -25,9 +28,12 @@ dbTest("canonical rows exist for all cleaned pairs", async () => {
      ) AND is_archived = FALSE`
   );
   assert.equal(result.rows.length, 7, "All canonical rows should be present and active");
+
 });
 
-dbTest("program_exercise has no alias exercise_id references", async () => {
+test("program_exercise has no alias exercise_id references", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const result = await pool.query(
     `SELECT COUNT(*) AS cnt FROM program_exercise
      WHERE exercise_id IN (
@@ -36,9 +42,12 @@ dbTest("program_exercise has no alias exercise_id references", async () => {
      )`
   );
   assert.equal(Number(result.rows[0].cnt), 0, "program_exercise should reference only canonical IDs");
+
 });
 
-dbTest("technique columns exist on exercise_catalogue after V82", async () => {
+test("technique columns exist on exercise_catalogue after V82", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const result = await pool.query(
     `SELECT column_name FROM information_schema.columns
      WHERE table_schema = 'public'
@@ -49,19 +58,21 @@ dbTest("technique columns exist on exercise_catalogue after V82", async () => {
        )`
   );
   assert.equal(result.rows.length, 5, "All five technique columns should exist after V82");
+
 });
 
-dbTest("key exercises have non-empty technique_cue", async () => {
+test("key exercises have non-empty technique_cue", async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const result = await pool.query(
     `SELECT exercise_id FROM exercise_catalogue
      WHERE exercise_id IN ('bb_back_squat','bb_deadlift','bb_bench_press','pullup','ski_erg')
        AND (technique_cue IS NULL OR technique_cue = '')`
   );
   assert.equal(result.rows.length, 0, "Key exercises should have technique_cue populated");
+
 });
 
 test.after(async () => {
-  if (hasDbConfig) {
-    await pool.end();
-  }
+  await pool.end();
 });

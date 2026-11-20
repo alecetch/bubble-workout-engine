@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../../../test/helpers/requireDb.js";
 import { normalizeInjuryFlags } from "../../utils/injuryFlags.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -25,8 +26,7 @@ for (const [label, fitnessLevel, rank, injuries, currentId, equipment] of [
   ['no compatible replacement', 'elite', 3, [], 'farmer_carry_weighted', ['unknown_equipment']],
 ]) {
   test(`equipment substitution respects live catalogue ${label}`, async t => {
-    try { await pool.query('SELECT 1'); }
-    catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
+    if (!await dbAvailableOrSkip(t, pool)) return;
     const updates = [];
 
     const db = { async query(sql, params) {

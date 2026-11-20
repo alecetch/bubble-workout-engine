@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./requireDb.js";
 import { randomUUID } from "node:crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
@@ -10,8 +11,7 @@ process.env.JWT_ISSUER = issuer;
 export { pool };
 export const token = userId => jwt.sign({ sub: userId, iss: issuer }, secret, { algorithm: "HS256", expiresIn: "1h" });
 export async function ensureDb(t) {
-  try { await pool.query("SELECT 1"); return true; }
-  catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message}`); return false; }
+  return dbAvailableOrSkip(t, pool);
 }
 export function appWithLogging() {
   const app = express();

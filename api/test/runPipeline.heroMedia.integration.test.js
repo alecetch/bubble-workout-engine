@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runPipeline } from "../engine/runPipeline.js";
@@ -260,12 +261,7 @@ function collectAllItems(program) {
 
 for (const [programType, expectedType] of [["strength", "strength"], ["hyrox", "generic"]]) {
   test(`${programType} pipeline resolves program and day heroes from migrated ${expectedType} rows`, async (t) => {
-    try {
-      await pool.query("SELECT 1");
-    } catch (err) {
-      t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-      return;
-    }
+    if (!await dbAvailableOrSkip(t, pool)) return;
     const { rows } = await pool.query("SELECT * FROM public.media_assets WHERE is_active = true ORDER BY sort_order, id");
     const out = await runPipeline({
       inputs: makeInputs({ daysPerWeek: 2 }),

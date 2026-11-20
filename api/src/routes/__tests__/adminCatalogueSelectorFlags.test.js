@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../../../test/helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -29,8 +30,7 @@ for (const [field, value] of [['max_fitness_rank', null], ['is_substitute', fals
   });
 
   test(`CSV import rejects the seed-owned ${field} column even when blank`, async t => {
-    try { await pool.query('SELECT 1'); }
-    catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
+    if (!await dbAvailableOrSkip(t, pool)) return;
     await withServer(async base => {
       const response = await fetch(`${base}/csv-import-dry-run`, {
         method: 'POST', headers: { 'X-Internal-Token': token, 'Content-Type': 'application/json' },

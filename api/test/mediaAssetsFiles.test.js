@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync } from "node:fs";
@@ -7,13 +8,7 @@ import { pool } from "../src/db.js";
 import { EXERCISE_MEDIA_BUCKET, headObject } from "../src/services/s3Service.js";
 
 async function ensureDb(t) {
-  try {
-    await pool.query("SELECT 1");
-    return true;
-  } catch (err) {
-    t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-    return false;
-  }
+  return dbAvailableOrSkip(t, pool);
 }
 
 const assetsDir = [new URL("../../assets/media-assets/", import.meta.url), new URL("../assets/media-assets/", import.meta.url)]

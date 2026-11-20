@@ -219,6 +219,6 @@ authRouter.post("/logout", async (req, res) => {
     return res.status(200).json({ ok: true });
   } catch (err) {
     req.log?.error?.({ event: "auth.logout.error" });
-    return res.status(500).json({ ok: false, code: "internal_error", error: publicInternalError(err) });
+    return res.status(500).json({ ok: false, code: "internal_error", error: "Internal server error" });
   }
 });

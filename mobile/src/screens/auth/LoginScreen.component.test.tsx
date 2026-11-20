@@ -193,4 +193,12 @@ describe("LoginScreen", () => {
     fireEvent.click(screen.getByText("Don't have an account? Create one"));
     expect(navigation.navigate).toHaveBeenCalledWith("Register");
   });
+  it("shows a 429 throttle message and enables submit again", async () => {
+    apiLoginMock.mockRejectedValueOnce(new ApiError(429, "Too many attempts. Try again later.", { code: "rate_limited" }));
+    renderScreen(); fillCredentials();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Too many attempts. Try again later.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    expect(saveTokensMock).not.toHaveBeenCalled(); expect(setSessionMock).not.toHaveBeenCalled();
+  });
 });

@@ -1,12 +1,15 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { run } from "../scripts/cleanup-orphaned-physique-photos.mjs";
 import { PHYSIQUE_BUCKET } from "../src/services/s3Service.js";
-import { pool, skip, withDeletionUser } from "../testSupport/accountDeletionFixtures.js";
+import { pool, withDeletionUser } from "../testSupport/accountDeletionFixtures.js";
 test.after(() => pool.end());
 
-for (const apply of [false, true]) test(`cleanup ${apply ? "apply" : "dry run"} preserves live and invalid prefixes`, { skip }, () => withDeletionUser(async user => {
+for (const apply of [false, true]) test(`cleanup ${apply ? "apply" : "dry run"} preserves live and invalid prefixes`, async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+return withDeletionUser(async user => {
   const orphan = `physique/${randomUUID()}/`, deleted = [], logs = [];
   const summary = await run({ db: pool, apply, log: event => logs.push(event),
     listPrefixesFn: async (prefix, bucket) => { assert.equal(prefix, "physique/"); assert.equal(bucket, PHYSIQUE_BUCKET); return [`physique/${user.id}/`, orphan, "physique/not-a-uuid/"]; },
@@ -16,7 +19,8 @@ for (const apply of [false, true]) test(`cleanup ${apply ? "apply" : "dry run"} 
   assert.deepEqual(summary, { checked: 2, orphaned: 1, skipped: 1, objects_deleted: apply ? 3 : 0 });
   assert.deepEqual(deleted, apply ? [orphan] : []);
   assert.deepEqual(logs[0], { prefix: orphan, objects: 3, apply });
-}));
+});
+});
 
 test("cleanup batches UUID lookups at 500 and never deletes a newly present user", async () => {
   const prefixes = Array.from({ length: 501 }, () => `physique/${randomUUID()}/`), batches = [];

@@ -1,11 +1,15 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, closeDb } from "../testSupport/entitlementFixtures.js";
 import { trainingProgram, transactionalPool, seedLog } from "../testSupport/trainingFixtures.js";
 import { backfillTrainingSessions } from "../scripts/backfillTrainingSessions.mjs";
 
 after(closeDb);
-test("backfill uses earliest confirmed local date, latest log timestamp, scheduled fallback, and is idempotent", { skip: DATABASE_SKIP }, async () => {
+test("backfill uses earliest confirmed local date, latest log timestamp, scheduled fallback, and is idempotent", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const program = await trainingProgram(db, user);
     await db.query("UPDATE app_user SET timezone = 'America/New_York' WHERE id = $1", [user]);
@@ -29,4 +33,5 @@ test("backfill uses earliest confirmed local date, latest log timestamp, schedul
     assert.equal(second.sessions, 0);
     assert.equal(second.completedTimestamps, 0);
   });
+
 });
