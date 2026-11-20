@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { inputToKg, formatWeight, unitLabel, type WeightUnit } from "../../utils/trainingWeight";
 import { localTrainingFields } from "../../utils/localDate";
 import { isOutboxAvailable } from "../../sync/setLogOutbox";
 import { useSetLogOutbox } from "../../sync/useSetLogOutboxSync";
@@ -106,6 +108,7 @@ function formatExerciseSummary(
   exercise: Exercise,
   setInputs: SetInputState[] | undefined,
   doneSetKeys: Set<string>,
+  unit: WeightUnit,
 ): string | null {
   const exerciseKey = exercise.id ?? "";
   const loggedSets = (setInputs ?? []).filter((_set, index) => doneSetKeys.has(`${exerciseKey}:${index}`));
@@ -117,7 +120,7 @@ function formatExerciseSummary(
   const prefix = loggedSets.length >= prescribed ? `${loggedSets.length} x ${reps}` : `${loggedSets.length}/${prescribed} sets - ${loggedSets.length} x ${reps}`;
   if (isUnloadedExercise(exercise)) return `${prefix} (bodyweight) ✓`;
   const weight = parseFloat(last.weight);
-  return `${prefix} @ ${Number.isFinite(weight) && weight > 0 ? weight : 0} kg ✓`;
+  return `${prefix} @ ${formatWeight(inputToKg(String(Number.isFinite(weight) && weight > 0 ? weight : 0), unit), unit)} ✓`;
 }
 
 export const SegmentCard = React.memo(function SegmentCard({
@@ -161,6 +164,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   const showRestTimer = useSettingsStore((state) => state.showRestTimer);
   const outbox = useSetLogOutbox(userId, programDayId, segment.id);
   const existingLogsQuery = useSegmentExerciseLogs(segment.id, programDayId, { userId });
+  const unit = useWeightUnit();
   const saveLogsMutation = useSaveSegmentLogs();
   const [inlineLoggingOpen, setInlineLoggingOpen] = useState(false);
   const [pbSetKeys, setPbSetKeys] = useState<Set<string>>(new Set());
@@ -198,6 +202,7 @@ export const SegmentCard = React.memo(function SegmentCard({
     setActiveSetKey,
     initialized,
   } = useSegmentSetLogging({
+    unit,
     loggableExercises,
     existingLogsQuery,
     outboxEntries: outbox.entries,
@@ -446,12 +451,11 @@ export const SegmentCard = React.memo(function SegmentCard({
       .map((exercise) => {
         const exerciseKey = exercise.id ?? "";
         const row = inputMap[exerciseKey]?.[roundIndex] ?? { weight: "", reps: "", rirActual: null };
-        const weightRaw = parseFloat(row.weight);
         const repsRaw = parseInt(row.reps, 10);
         return {
           programExerciseId: exerciseKey,
           orderIndex: roundIndex + 1,
-          weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(weightRaw) && weightRaw > 0 ? weightRaw : null),
+          weightKg: isUnloadedExercise(exercise) ? null : inputToKg(row.weight, unit),
           repsCompleted: Number.isInteger(repsRaw) && repsRaw > 0 ? repsRaw : 0,
           rirActual: includeRir ? (exerciseRirMap[exerciseKey] ?? null) : null,
         };
@@ -608,12 +612,12 @@ export const SegmentCard = React.memo(function SegmentCard({
   ): void {
     const queued = outbox.entries.find(entry => entry.row.programExerciseId === exerciseKey && entry.row.orderIndex === setIndex + 1);
     if (queued) {
-      const number = field === "weight" ? parseFloat(value) : parseInt(value, 10);
+      const number = field === "weight" ? inputToKg(value, unit) : parseInt(value, 10);
       const current = inputMap[exerciseKey]?.[setIndex];
       const row = { ...queued.row,
-        weightKg: current ? (Number.isFinite(parseFloat(current.weight)) ? parseFloat(current.weight) : null) : queued.row.weightKg,
+        weightKg: current ? inputToKg(current.weight, unit) : queued.row.weightKg,
         repsCompleted: current ? (Number.isFinite(parseInt(current.reps, 10)) ? parseInt(current.reps, 10) : null) : queued.row.repsCompleted,
-        [field === "weight" ? "weightKg" : "repsCompleted"]: Number.isFinite(number) ? number : null };
+        [field === "weight" ? "weightKg" : "repsCompleted"]: number != null && Number.isFinite(number) ? number : null };
       void saveStatus.saveRows({ userId, programId, programDayId, workoutSegmentId: segment.id,
         ...capturedSetDate(), rows: [row] }, { confirm: false }).catch(() => {});
     }
@@ -633,15 +637,15 @@ export const SegmentCard = React.memo(function SegmentCard({
 
   async function confirmSetWeight(exercise: Exercise, setIndex: number): Promise<boolean> {
     if (isUnloadedExercise(exercise)) return true;
-    const enteredKg = parseFloat(inputMap[exercise.id ?? ""]?.[setIndex]?.weight ?? "");
-    const reference = parseFloat(guidelinePrefill(exercise)) || parseFloat(inputMap[exercise.id ?? ""]?.[setIndex - 1]?.weight ?? "");
+    const enteredKg = inputToKg(inputMap[exercise.id ?? ""]?.[setIndex]?.weight ?? "", unit) ?? NaN;
+    const reference = inputToKg(guidelinePrefill(exercise, unit), unit) || inputToKg(inputMap[exercise.id ?? ""]?.[setIndex - 1]?.weight ?? "", unit);
     const unusual = weightLooksUnusual(enteredKg, reference);
     const key = `${programDayId}:${buildSetKey(exercise, setIndex)}:${enteredKg}`;
     if (!unusual) return true;
     if (promptedWeights.current.has(key)) return true;
     promptedWeights.current.add(key);
     return new Promise(resolve => Alert.alert("Check this weight",
-      unusual === "too_high" ? "That's over 400 kg." : `That's much ${unusual} than last time. Save ${enteredKg} kg?`,
+      unusual === "too_high" ? `That's over ${formatWeight(400, unit, { decimals: 0 })}.` : `That's much ${unusual} than last time. Save ${formatWeight(enteredKg, unit)}?`,
       [
         { text: "Edit", style: "cancel", onPress: () => { resolve(false); } },
         { text: "Save", onPress: () => { resolve(true); } },
@@ -668,7 +672,7 @@ export const SegmentCard = React.memo(function SegmentCard({
       rows: [{
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
+        weightKg: isUnloadedExercise(exercise) ? null : inputToKg(row.weight, unit),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       }],
@@ -781,7 +785,7 @@ export const SegmentCard = React.memo(function SegmentCard({
       rows: uncheckedRows.map(({ setIndex, row }) => ({
         programExerciseId,
         orderIndex: setIndex + 1,
-        weightKg: isUnloadedExercise(exercise) ? null : (Number.isFinite(parseFloat(row.weight)) ? parseFloat(row.weight) || null : null),
+        weightKg: isUnloadedExercise(exercise) ? null : inputToKg(row.weight, unit),
         repsCompleted: Number.isFinite(parseInt(row.reps, 10)) ? parseInt(row.reps, 10) || null : null,
         rirActual: exerciseRir,
       })),
@@ -836,8 +840,8 @@ export const SegmentCard = React.memo(function SegmentCard({
     if (!Number.isInteger(reps) || reps <= 0) return null;
     if (isUnloadedExercise(exercise)) return `bodyweight x ${reps}`;
     const weight = parseFloat(row.weight);
-    if (!Number.isFinite(weight) || weight <= 0) return `0 kg x ${reps}`;
-    return `${weight} kg x ${reps}`;
+    if (!Number.isFinite(weight) || weight <= 0) return `0 ${unitLabel(unit)} x ${reps}`;
+    return `${formatWeight(inputToKg(row.weight, unit), unit)} x ${reps}`;
   }
 
   function handleSelectRir(exercise: Exercise, optionValue: number): void {
@@ -926,7 +930,7 @@ export const SegmentCard = React.memo(function SegmentCard({
                       const isComplete = completedExerciseIds.has(programExerciseId);
                       const summary = isComplete
                         ? index === 0
-                          ? formatRoundSummary(loggableExercises, totalRounds, completedRoundIndices.size, inputMap, doneSetKeys)
+                          ? formatRoundSummary(loggableExercises, totalRounds, completedRoundIndices.size, inputMap, doneSetKeys, unit)
                           : null
                         : null;
 
@@ -978,7 +982,7 @@ export const SegmentCard = React.memo(function SegmentCard({
                     const exerciseId = exercise.exerciseId ?? programExerciseId;
                     const isComplete = completedExerciseIds.has(programExerciseId);
                     const summary = isComplete
-                      ? formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys)
+                      ? formatExerciseSummary(exercise, inputMap[programExerciseId], doneSetKeys, unit)
                       : null;
 
                     return (
@@ -1087,6 +1091,7 @@ export const SegmentCard = React.memo(function SegmentCard({
             </View>
           ) : isRoundBased ? (
             <RoundBasedLoggingPanel
+                  unit={unit}
               totalRounds={totalRounds}
               completedRoundIndices={completedRoundIndices}
               activeRoundIndex={activeRoundIndex}
@@ -1163,7 +1168,7 @@ export const SegmentCard = React.memo(function SegmentCard({
                 }
 
                 if (isSequenced && index < activeExerciseIndex) {
-                  const summaryText = formatExerciseSummary(exercise, inputMap[exerciseKey], doneSetKeys);
+                  const summaryText = formatExerciseSummary(exercise, inputMap[exerciseKey], doneSetKeys, unit);
                   return (
                     <View key={exerciseKey} style={styles.exerciseLoggedSummaryRow}>
                       <Text style={styles.exerciseLoggedSummaryLabel}>
@@ -1182,6 +1187,7 @@ export const SegmentCard = React.memo(function SegmentCard({
 
                 return (
                   <InlineExerciseLogBlock
+                    unit={unit}
                     key={exerciseKey}
                     exercise={exercise}
                     setInputs={setInputs}

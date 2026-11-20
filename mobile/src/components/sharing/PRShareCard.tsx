@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatWeight } from "../../utils/trainingWeight";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -18,6 +20,7 @@ export function PRShareCard({
   dateLabel,
   cardRef,
 }: PRShareCardProps): React.JSX.Element {
+  const unit = useWeightUnit();
   return (
     <View style={styles.offscreen} pointerEvents="none">
       <View ref={cardRef} style={styles.card} collapsable={false}>
@@ -27,7 +30,7 @@ export function PRShareCard({
         <View style={styles.body}>
           <Text style={styles.prLabel}>Personal Record</Text>
           <Text style={styles.exerciseName}>{exerciseName}</Text>
-          <Text style={styles.e1rmValue}>{e1rmKg.toFixed(1)} kg</Text>
+          <Text style={styles.e1rmValue}>{formatWeight(e1rmKg, unit, { decimals: 1 })}</Text>
           <Text style={styles.e1rmSub}>Estimated 1RM</Text>
         </View>
         <View style={styles.footer}>

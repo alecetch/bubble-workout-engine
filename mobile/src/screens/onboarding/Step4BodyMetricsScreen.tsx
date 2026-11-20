@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
 import { useReviewEditBack } from "./useReviewEditBack";
 import { PHYSIQUE_ENABLED } from "../../config/features";
@@ -40,6 +41,7 @@ type Props = NativeStackScreenProps<OnboardingStackParamList, "Step4BodyMetrics"
 type UnitSystem = "metric" | "imperial";
 
 export function Step4BodyMetricsScreen({ navigation, route }: Props): React.JSX.Element {
+  const queryClient = useQueryClient();
   const returnToReview = route?.params?.returnToReview ?? false;
   const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step3Schedule"));
   const meQuery = useMe();
@@ -176,6 +178,7 @@ export function Step4BodyMetricsScreen({ navigation, route }: Props): React.JSX.
         onboardingStepCompleted: Math.max(draft.onboardingStepCompleted, 4) as typeof draft.onboardingStepCompleted,
         ...(!returnToReview ? { onboardingCompletedAt: new Date().toISOString() } : {}),
       });
+      queryClient.setQueryData(["preferredUnit"], unitSystem === "imperial" ? "lbs" : "kg");
       if (PHYSIQUE_ENABLED && photoUri) {
         void startBackgroundPhotoUpload(photoUri);
       }

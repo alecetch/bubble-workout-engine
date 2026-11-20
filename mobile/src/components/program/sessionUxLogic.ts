@@ -1,9 +1,10 @@
+import { formatWeight, inputToKg, kgToInput, suggestedLoad, type WeightUnit } from "../../utils/trainingWeight";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
 import type { SaveSegmentLogPayload, SegmentLogRow } from "../../api/segmentLog";
 import { isWarmupOrCooldownSegment } from "./segmentCardLogic";
 
 export type GuidelinePrefillExercise = {
-  guidelineLoad?: { value?: number | string | null } | null;
+  guidelineLoad?: { value?: number | string | null; unit?: string } | null;
   progressionRecommendation?: {
     recommendedLoadKg?: number | null;
     recommendedRepsTarget?: number | null;
@@ -53,16 +54,17 @@ export function repsPrefill(ex: GuidelinePrefillExercise): string {
   return parseRepsPrefill(ex.reps);
 }
 
-export function guidelinePrefill(ex: GuidelinePrefillExercise): string {
+export function guidelinePrefill(ex: GuidelinePrefillExercise, unit: WeightUnit = "kg"): string {
   const recommendedLoadKg = ex.progressionRecommendation?.recommendedLoadKg;
   if (recommendedLoadKg != null && Number.isFinite(Number(recommendedLoadKg)) && Number(recommendedLoadKg) > 0) {
-    return String(Number(recommendedLoadKg));
+    return String(suggestedLoad(Number(recommendedLoadKg), unit, ex.guidelineLoad?.unit === "kg_per_hand" ? "per_hand" : ex.guidelineLoad?.unit === "kg_per_side" ? "per_side" : "total").value);
   }
   const glv = ex.guidelineLoad?.value;
   if (glv != null && Number.isFinite(Number(glv)) && Number(glv) > 0) {
-    return String(Number(glv));
+    return String(suggestedLoad(Number(glv), unit, ex.guidelineLoad?.unit === "kg_per_hand" ? "per_hand" : ex.guidelineLoad?.unit === "kg_per_side" ? "per_side" : "total").value);
   }
-  return parseWeightPrefill(ex.intensity);
+  const fallback = parseWeightPrefill(ex.intensity);
+  return fallback ? String(suggestedLoad(Number(fallback), unit, "total").value) : "";
 }
 
 export function getExerciseSetCount(exercise: { sets?: number | string | null | undefined }): number {
@@ -72,13 +74,14 @@ export function getExerciseSetCount(exercise: { sets?: number | string | null | 
 export function buildInitialSetInputMap(
   exercises: Exercise[],
   existingRows: SegmentLogRow[] = [],
+  unit: WeightUnit = "kg",
 ): Record<string, SetInputState[]> {
   const initial: Record<string, SetInputState[]> = {};
 
   for (const ex of exercises) {
     const key = ex.id ?? "";
     const setCount = getExerciseSetCount(ex);
-    const prefillWeight = ex.isLoadable === false || ex.isUnloaded === true ? "" : guidelinePrefill(ex);
+    const prefillWeight = ex.isLoadable === false || ex.isUnloaded === true ? "" : guidelinePrefill(ex, unit);
     const prefillReps = repsPrefill(ex);
     initial[key] = Array.from({ length: setCount }, () => ({
       weight: prefillWeight,
@@ -92,7 +95,7 @@ export function buildInitialSetInputMap(
     if (!initial[key]) continue;
     const idx = (row.orderIndex ?? 1) - 1;
     if (idx < 0 || idx >= initial[key].length) continue;
-    if (row.weightKg != null) initial[key][idx].weight = String(row.weightKg);
+    if (row.weightKg != null) initial[key][idx].weight = kgToInput(row.weightKg, unit);
     if (row.repsCompleted != null) initial[key][idx].reps = String(row.repsCompleted);
     if (row.rirActual != null) initial[key][idx].rirActual = row.rirActual;
   }
@@ -103,6 +106,7 @@ export function buildInitialSetInputMap(
 export function buildSegmentLogRows(
   exercises: Exercise[],
   inputMap: Record<string, SetInputState[]>,
+  unit: WeightUnit = "kg",
 ): SaveSegmentLogPayload["rows"] {
   const rows: SaveSegmentLogPayload["rows"] = [];
 
@@ -131,12 +135,12 @@ export function buildSegmentLogRows(
     }
     const sets = inputMap[key] ?? [];
     sets.forEach((set, i) => {
-      const wRaw = parseFloat(set.weight);
+      const wRaw = inputToKg(set.weight, unit);
       const rRaw = parseInt(set.reps, 10);
       rows.push({
         programExerciseId: key,
         orderIndex: i + 1,
-        weightKg: Number.isFinite(wRaw) && wRaw > 0 ? wRaw : null,
+        weightKg: wRaw != null && wRaw > 0 ? wRaw : null,
         repsCompleted: Number.isInteger(rRaw) && rRaw > 0 ? rRaw : null,
         rirActual: set.rirActual ?? null,
       });
@@ -156,6 +160,7 @@ export function formatRoundSummary(
   completedRoundCount: number,
   inputMap: Record<string, SetInputState[]>,
   doneSetKeys: Set<string>,
+  unit: WeightUnit = "kg",
 ): string | null {
   if (completedRoundCount === 0) return null;
   const firstExercise = exercises.find((exercise) => exercise.id);
@@ -177,7 +182,7 @@ export function formatRoundSummary(
 
   const weight = parseFloat(last.weight);
   if (!Number.isFinite(weight) || weight <= 0) return null;
-  return `${prefix} · ${weight} kg x ${reps} ✓`;
+  return `${prefix} · ${formatWeight(inputToKg(last.weight, unit), unit)} x ${reps} ✓`;
 }
 
 export function computeSessionStatsFromSegments(

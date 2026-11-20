@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatWeight, formatVolume, type WeightUnit } from "../../utils/trainingWeight";
 import { PHYSIQUE_ENABLED } from "../../config/features";
 import React, { useEffect, useState } from "react";
 import {
@@ -56,9 +58,10 @@ function formatDateLabel(isoDate: string): string {
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function formatKg(value: number | null | undefined): string {
+function formatHistoryWeight(value: number | null | undefined, unit: WeightUnit): string {
   if (!Number.isFinite(value)) return "n/a";
   const numeric = value as number;
+  if (unit === "lbs") return formatWeight(numeric, unit);
   if (Number.isInteger(numeric)) return `${numeric} kg`;
   return `${numeric.toFixed(1)} kg`;
 }
@@ -94,6 +97,7 @@ function TimelineRow({
   item: HistoryTimelineItem;
   onPressExercise?: (exerciseId: string, exerciseName: string) => void;
 }): React.JSX.Element {
+  const unit = useWeightUnit();
   return (
     <View style={styles.timelineCard}>
       <HeroMediaThumb uri={item.heroMediaCardUrl ?? item.heroMediaUrl} thumbhash={item.heroMediaThumbhash} compact />
@@ -111,7 +115,7 @@ function TimelineRow({
             disabled={!item.highlight.exerciseId || !onPressExercise}
           >
             <Text style={styles.timelineHighlight}>
-              Max {item.highlight.value}kg - {item.highlight.exerciseName}
+              Max {unit === "kg" ? `${item.highlight.value}kg` : formatWeight(item.highlight.value, unit)} - {item.highlight.exerciseName}
             </Text>
           </PressableScale>
         ) : null}
@@ -135,6 +139,8 @@ function ExerciseResultRow({
 }
 
 export function HistoryScreen(): React.JSX.Element {
+  const unit = useWeightUnit();
+  const formatKg = (value: number | null | undefined) => formatHistoryWeight(value, unit);
   const navigation = useNavigation<HistoryScreenNavProp>();
   const queryClient = useQueryClient();
   const onboardingUserId = useOnboardingStore((state) => state.userId);
@@ -441,7 +447,7 @@ export function HistoryScreen(): React.JSX.Element {
         <View style={styles.metricsGridCard}>
           <Text style={styles.metricsGridLabel}>Volume 28d</Text>
           <Text style={styles.metricsGridValue}>
-            {metrics?.volume28d != null ? `${Math.round(metrics.volume28d)} kg` : "-"}
+            {metrics?.volume28d != null ? unit === "lbs" ? formatVolume(metrics.volume28d, unit) : `${Math.round(metrics.volume28d)} kg` : "-"}
           </Text>
           <Text style={styles.metricsGridSub}>total volume</Text>
         </View>
@@ -450,7 +456,7 @@ export function HistoryScreen(): React.JSX.Element {
           <Text style={styles.metricsGridLabel}>Strength Upper 28d</Text>
           <Text style={styles.metricsGridValue}>
             {metrics?.strengthUpper28d?.bestE1rmKg != null
-              ? `${metrics.strengthUpper28d.bestE1rmKg.toFixed(1)} kg`
+              ? formatWeight(metrics.strengthUpper28d.bestE1rmKg, unit, { decimals: 1 })
               : "-"}
           </Text>
           <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>
@@ -466,7 +472,7 @@ export function HistoryScreen(): React.JSX.Element {
           <Text style={styles.metricsGridLabel}>Strength Lower 28d</Text>
           <Text style={styles.metricsGridValue}>
             {metrics?.strengthLower28d?.bestE1rmKg != null
-              ? `${metrics.strengthLower28d.bestE1rmKg.toFixed(1)} kg`
+              ? formatWeight(metrics.strengthLower28d.bestE1rmKg, unit, { decimals: 1 })
               : "-"}
           </Text>
           <Text style={styles.metricsGridSubLabel}>Best e1RM</Text>

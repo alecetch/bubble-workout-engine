@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatVolume } from "../../utils/trainingWeight";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
@@ -48,11 +50,12 @@ export function SessionSummaryModal({
   isSubmitting = false,
   onDismiss,
 }: SessionSummaryModalProps): React.JSX.Element {
+  const unit = useWeightUnit();
   const prCardRef = useRef<ViewInstance>(null);
   const [isSharing, setIsSharing] = useState(false);
   const roundedVolume = Math.round(totalVolumeKg ?? 0);
   const volumeDisplay =
-    totalVolumeKg === null ? "–" : roundedVolume >= 1000
+    totalVolumeKg === null ? "–" : unit === "lbs" ? formatVolume(totalVolumeKg ?? 0, unit) : roundedVolume >= 1000
       ? `${(roundedVolume / 1000).toFixed(1)}t`
       : `${roundedVolume.toLocaleString()} kg`;
 

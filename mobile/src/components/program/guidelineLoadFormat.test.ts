@@ -11,3 +11,6 @@ test("formatGuidelineValue returns per-hand string for kg_per_hand", () => {
 test("formatGuidelineValue returns per-side string for kg_per_side", () => {
     expect(formatGuidelineValue({ value: 15, unit: "kg_per_side" })).toBe("15 kg / side");
 });
+
+for(const [kind,kg,lb] of [["kg","22.5 kg","50 lb"],["kg_per_hand","22.5 kg / hand","50 lb / hand"],["kg_per_side","22.5 kg / side","50 lb / side"],["bodyweight","Bodyweight","Bodyweight"]])
+ test(`guideline ${kind} respects both units`,()=>{expect(formatGuidelineValue({value:22.5,unit:kind},"kg")).toBe(kg);expect(formatGuidelineValue({value:22.5,unit:kind},"lbs")).toBe(lb);});

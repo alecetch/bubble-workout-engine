@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
@@ -29,6 +30,7 @@ function confidenceDotStyle(confidence: GuidelineLoad["confidence"]) {
 }
 
 export function GuidelineLoadHint({ guidelineLoad }: GuidelineLoadHintProps): React.JSX.Element {
+  const unit = useWeightUnit();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -37,7 +39,7 @@ export function GuidelineLoadHint({ guidelineLoad }: GuidelineLoadHintProps): Re
         <View style={styles.triggerRow}>
           <View style={[styles.dot, confidenceDotStyle(guidelineLoad.confidence)]} />
           <Text style={styles.summaryText}>
-            {`Suggested start: ${formatGuidelineValue(guidelineLoad)}  •  ${confidenceLabel(guidelineLoad.confidence)}`}
+            {`Suggested start: ${formatGuidelineValue(guidelineLoad, unit)}  •  ${confidenceLabel(guidelineLoad.confidence)}`}
           </Text>
         </View>
         {guidelineLoad.source === "rank_default" ? (

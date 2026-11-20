@@ -80,9 +80,9 @@ describe("UnitPickerScreen", () => {
 
     expect(screen.getByText("WEIGHT")).toBeInTheDocument();
     expect(screen.getByText(/kg.*Kilograms/)).toBeInTheDocument();
-    expect(screen.getByText(/lbs.*Pounds/)).toBeInTheDocument();
+    expect(screen.getByText(/lb.*Pounds/)).toBeInTheDocument();
     expect(within(rowFor(/kg.*Kilograms/)).getByTestId("radio-button-on")).toBeInTheDocument();
-    expect(within(rowFor(/lbs.*Pounds/)).getByTestId("radio-button-off")).toBeInTheDocument();
+    expect(within(rowFor(/lb.*Pounds/)).getByTestId("radio-button-off")).toBeInTheDocument();
   });
 
   it("renders HEIGHT section with cm and ft options; cm is shown as selected", () => {
@@ -98,7 +98,7 @@ describe("UnitPickerScreen", () => {
   it("tapping lbs immediately calls the weight mutation with lbs", () => {
     renderScreen();
 
-    fireEvent.click(rowFor(/lbs.*Pounds/));
+    fireEvent.click(rowFor(/lb.*Pounds/));
 
     expect(weightMutateMock).toHaveBeenCalledWith("lbs");
     expect(heightMutateMock).not.toHaveBeenCalled();
@@ -111,5 +111,9 @@ describe("UnitPickerScreen", () => {
 
     expect(heightMutateMock).toHaveBeenCalledWith("ft");
     expect(weightMutateMock).not.toHaveBeenCalled();
+  });
+  it("explains and caches the shared weight preference",()=>{
+    renderScreen();expect(screen.getByText("Used for body weight and training weights.")).toBeInTheDocument();
+    const options=vi.mocked(useMutation).mock.calls[0][0] as any;options.onSuccess(undefined,"lbs");expect(setQueryDataMock).toHaveBeenCalledWith(["preferredUnit"],"lbs");
   });
 });

@@ -1,3 +1,4 @@
+import { unitLabel } from "../../utils/trainingWeight";
 import * as setOutbox from "../../sync/setLogOutbox";
 import { stopOutboxSender } from "../../sync/setLogOutboxSender";
 import { formatReferralStats } from "../../utils/referralStats";
@@ -475,7 +476,7 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
               <>
                 <SettingsRow
                   label="Units"
-                  value={`${preferredUnitQuery.data} · ${preferredHeightUnitQuery.data}`}
+                  value={`${unitLabel(preferredUnitQuery.data)} · ${preferredHeightUnitQuery.data}`}
                   onPress={() =>
                     navigation.navigate("UnitPicker", {
                       currentUnit: preferredUnitQuery.data ?? "kg",

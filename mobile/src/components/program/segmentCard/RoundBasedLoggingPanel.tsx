@@ -1,3 +1,4 @@
+import { unitLabel, type WeightUnit } from "../../../utils/trainingWeight";
 import React from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
@@ -26,6 +27,7 @@ type RestStripRenderProps = {
 };
 
 type RoundBasedLoggingPanelProps = {
+  unit?: WeightUnit;
   totalRounds: number;
   completedRoundIndices: Set<number>;
   activeRoundIndex: number;
@@ -56,6 +58,7 @@ function isUnloadedExercise(exercise: Exercise): boolean {
 }
 
 export function RoundBasedLoggingPanel({
+  unit = "kg",
   totalRounds,
   completedRoundIndices,
   activeRoundIndex,
@@ -130,7 +133,7 @@ export function RoundBasedLoggingPanel({
                       <TextInput
                         value={row.weight}
                         onChangeText={(value) => {
-                          const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+                          const sanitized = value.replace(",", ".").replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
                           onUpdateSetInput(exerciseKey, roundIndex, (prev) => ({ ...prev, weight: sanitized }));
                         }}
                         keyboardType="decimal-pad"
@@ -139,7 +142,7 @@ export function RoundBasedLoggingPanel({
                         style={styles.inputField}
                       />
                       <View style={styles.inputSuffixWrap}>
-                        <Text style={styles.inputSuffix}>kg</Text>
+                        <Text style={styles.inputSuffix}>{unitLabel(unit)}</Text>
                       </View>
                     </View>
                   )}

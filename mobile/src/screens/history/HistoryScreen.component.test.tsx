@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 const featureFlags = vi.hoisted(() => ({ PHYSIQUE_ENABLED: true }));
 vi.mock("../../config/features", () => featureFlags);
 import React from "react";
@@ -561,4 +562,8 @@ describe("HistoryScreen", () => {
     expect(navigationNavigateMock).toHaveBeenCalledWith("YearRecap", { year: 2025 });
   });
 
+  it("shows history volume and strength in pounds",()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");useSessionHistoryMetricsMock.mockReturnValue({data:metricsFixture,isLoading:false,isError:false,refetch:vi.fn()} as any);
+    renderScreen();expect(screen.getByText("11,023 lb")).toBeInTheDocument();expect(screen.getAllByText("220.5 lb").length).toBeGreaterThan(0);expect(screen.getAllByText(/264.6 lb/).length).toBeGreaterThan(0);
+  });
 });

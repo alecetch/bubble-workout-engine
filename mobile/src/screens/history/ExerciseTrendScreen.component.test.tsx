@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -146,5 +147,11 @@ describe("ExerciseTrendScreen", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(latestHistoryWindow()).toBe("all");
+  });
+  it("converts chart axes and summary labels without changing cached series",()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");
+    const series=[{date:"2026-01-01",estimatedE1rmKg:61.23,decisionOutcome:"hold"},{date:"2026-01-08",estimatedE1rmKg:100,decisionOutcome:"increase_load"}];
+    useExerciseHistoryMock.mockReturnValue({data:{series,summary:{bestEstimatedE1rmKg:100,bestWeightKg:61.23,sessionsCount:2}},isLoading:false,isError:false,refetch:vi.fn()} as any);
+    renderScreen();expect(screen.getAllByText("135 lb").length).toBeGreaterThan(0);expect(screen.getByText("220.5 lb")).toBeInTheDocument();expect(document.body.textContent).toContain("220 lb");expect(series[0].estimatedE1rmKg).toBe(61.23);
   });
 });

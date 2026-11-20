@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatWeight, formatVolume } from "../../utils/trainingWeight";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -80,6 +82,7 @@ function StrengthCard({
   data: SessionHistoryStrengthRegion | null;
   onPress?: (exerciseId: string, exerciseName: string) => void;
 }): React.JSX.Element {
+  const unit = useWeightUnit();
   return (
     <PressableScale
       style={styles.strengthCard}
@@ -90,7 +93,7 @@ function StrengthCard({
       {data ? (
         <>
           <Text style={styles.strengthCardExercise}>{data.exerciseName}</Text>
-          <Text style={styles.strengthCardValue}>{data.bestE1rmKg.toFixed(1)} kg</Text>
+          <Text style={styles.strengthCardValue}>{formatWeight(data.bestE1rmKg, unit, { decimals: 1 })}</Text>
           <Text style={styles.strengthCardSubLabel}>Best e1RM</Text>
           {data.trendPct != null ? (
             <Text
@@ -112,6 +115,7 @@ function StrengthCard({
 }
 
 export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element {
+  const unit = useWeightUnit();
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const [region, setRegion] = useState<RegionKey>("upper");
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2;
@@ -190,7 +194,7 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
           ) : (
             <>
               <View style={[styles.barChart, { width: chartWidth, height: CHART_HEIGHT }]}>
-                <Text style={styles.chartScaleTop}>{peakWeek.toLocaleString()} kg</Text>
+                <Text style={styles.chartScaleTop}>{unit === "kg" ? `${peakWeek.toLocaleString()} kg` : formatVolume(peakWeek, unit)}</Text>
                 <Text style={styles.chartScaleBottom}>0</Text>
                 {bars.map((bar, index) => (
                   <View
@@ -224,7 +228,7 @@ export function ProgressOverviewScreen({ navigation }: Props): React.JSX.Element
                 )}
               </View>
               <Text style={styles.chartSummary}>
-                {`${activeWeeksCount} active weeks of data. Peak week: ${peakWeek.toLocaleString()} kg volume load.`}
+                {`${activeWeeksCount} active weeks of data. Peak week: ${unit === "kg" ? `${peakWeek.toLocaleString()} kg` : formatVolume(peakWeek, unit)} volume load.`}
               </Text>
             </>
           )}
