@@ -81,7 +81,7 @@ describe("authenticatedFetch session expiry handling", () => {
     expectQueryCacheCleared();
   });
 
-  it("clears auth state when the refresh request fails", async () => {
+  it("clears auth state on an explicit refresh 401 invalid_token", async () => {
     seedQueryCache();
     vi.mocked(getRefreshToken).mockResolvedValue("refresh-token-1");
     server.use(
@@ -89,7 +89,7 @@ describe("authenticatedFetch session expiry handling", () => {
         HttpResponse.json({ code: "token_expired" }, { status: 401 })
       )),
       http.post(`${API_URL}/api/auth/refresh`, () => (
-        HttpResponse.json({ code: "refresh_failed" }, { status: 401 })
+        HttpResponse.json({ code: "invalid_token" }, { status: 401 })
       )),
     );
 

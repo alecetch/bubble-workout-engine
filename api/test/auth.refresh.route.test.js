@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -11,7 +12,7 @@ const { authRouter } = await import("../src/routes/auth.js");
 after(() => pool.end());
 
 async function fixture(t, run) {
-  try { await pool.query("SELECT 1"); } catch (error) { t.skip(`Postgres unavailable: ${error.code || error.message}`); return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const user = await registerUser(pool, { email: `refresh-${randomUUID()}@example.com`, password: "StrongPassword123!" });
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => { req.log = { info() {}, debug() {}, warn() {}, error() {} }; next(); });

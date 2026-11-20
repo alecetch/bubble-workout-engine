@@ -18,56 +18,33 @@ export default defineConfig({
         ".maestro/scripts/**", // Maestro helper scripts are covered by E2E flow execution, not unit coverage
         "App.tsx", // app bootstrap/native provider wiring, not isolated business logic
         "scripts/**", // local maintenance helpers, not shipped mobile runtime code
-        "src/navigation/**", // pure navigator configuration, covered by screen and E2E flows
-        // Thin HTTP endpoint wrappers — no local business logic
-        "src/api/client.ts", // shared network boundary wrapper; branch coverage belongs in API contract/integration tests
-        "src/api/equipmentPresets.ts", // reference-data endpoint wrapper with no local business logic
-        "src/api/equipmentRegen.ts", // thin mutation endpoint wrapper exercised through equipment screen tests
-        "src/api/exerciseGuidance.ts", // thin endpoint wrapper with no local business logic
-        "src/api/history.ts", // thin history endpoint wrapper exercised through history screen tests
+        "src/navigation/*Navigator.tsx", // Native stack/container configuration; exercised by native E2E flows
+        "src/navigation/AppTabs.tsx", // Native tab navigation configuration
+        "src/navigation/navigationRef.ts", // Native navigation-container ref; routing decisions are measured separately
 
-        "src/api/physique.ts", // thin physique endpoint wrapper exercised through physique screen tests
-        "src/api/physiqueScan.ts", // native upload endpoint wrapper exercised through physique screen tests
-        "src/api/profileApi.ts", // thin profile endpoint wrapper exercised through settings/onboarding flows
-        "src/api/program.ts", // thin program endpoint wrapper exercised through program screen tests
-        "src/api/programCompletion.ts", // thin completion endpoint wrapper exercised through program completion tests
-        "src/api/programDayActions.ts", // thin workout action endpoint wrapper exercised through program-day tests
-        "src/api/programExercise.ts", // thin exercise endpoint wrapper exercised through program screen tests
-        "src/api/referenceData.ts", // reference-data endpoint wrapper with no local business logic
-        "src/api/referral.ts", // thin referral endpoint wrapper with no local business logic
-        "src/api/segmentLog.ts", // thin logging endpoint wrapper exercised through logging modal tests
-        "src/api/tokenStorage.ts", // wraps expo-secure-store native module; native key-value store not mockable in jsdom
-        "src/api/trainingHistoryImport.ts", // thin import endpoint wrapper with no local business logic
-        "src/api/userIdentity.ts", // device identity boundary wrapper with no local business logic
-        "src/api/hooks.ts", // react-query hook wrappers; 748-line thin wrapper over all API calls — same category as other excluded api/* files; v8 now tracks this accurately in v4
-        "src/api/bonusDayApi.ts", // thin bonus-day endpoint wrapper; 0% coverage in v4 indicates never invoked via component tests
+        "src/api/tokenStorage.ts", // Native SecureStore adapter; auth/refresh logic is measured in client.ts
         "src/api/__fixtures__/**", // static JSON fixture data loaded by MSW handlers; not executable application code
-        // Onboarding components with dedicated component tests — no longer excluded
-        // Native API / platform boundaries — not mockable in jsdom
+        // Native rendering/device boundaries; mocked calls do not verify hardware behavior
         "src/components/sharing/PRShareCard.tsx", // share-card rendering is native/media boundary; tested via E2E screenshot flows
         "src/components/physique/PhysiqueShareCard.tsx", // physique share-card at native screenshot boundary
         "src/components/interaction/usePressScale.ts", // animation hook using Reanimated worklets; no testable business logic
-        "src/components/interaction/haptics.ts", // thin wrapper over expo-haptics native API; not mockable in jsdom
+        "src/components/interaction/haptics.ts", // Native haptic feedback adapter; hardware behavior requires a device
         "src/components/program/HeroHeader.tsx", // Reanimated + expo-linear-gradient animation component; animation worklet boundary
-        "src/components/program/TechniqueSheet.tsx", // presentational technique sheet, covered through workout flow behaviour
         "src/components/sharing/WeekShareCard.tsx", // share-card rendering is native/media boundary, covered by feature-level UI tests later
-        "src/components/timers/RingTimer.tsx", // visual timer shell, covered through premium timer/countdown behaviour
-        "src/components/timers/useSegmentTimer.ts", // timer side-effect hook, covered through in-session timer behaviour
-        "src/utils/reduceMotion.ts", // thin wrapper over React Native AccessibilityInfo native API; not mockable in jsdom
-        "src/utils/shareCard.ts", // wraps expo-sharing and react-native-view-shot native APIs; not mockable in jsdom
-        "src/lib/purchases.ts", // RevenueCat IAP module loaded via dynamic require; native module not available in jsdom
-        // Screens whose uncovered functions are exclusively native-API callbacks
-        "src/screens/physique/PhysiqueCheckInScreen.tsx", // all handlers are expo-image-picker / camera native callbacks; E2E scope only
-        "src/screens/physique/PhysiqueIntelligenceScreen.tsx", // image picker + native SVG scan analysis boundary; E2E scope only
-        "src/screens/program/ProgramDayScreen.tsx", // primary workout session screen; timer/gesture/completion callbacks covered by Maestro E2E flows
+        "src/components/timers/RingTimer.tsx", // Native SVG renderer; timer state and hook logic are measured
+        "src/utils/reduceMotion.ts", // Native accessibility preference adapter; system behavior requires a device
+        "src/utils/shareCard.ts", // Native screenshot/share adapter; capture and OS share sheet require a device
+        // Screens with native camera/share integration, plus the explicitly retained workout-screen gap
+        "src/screens/physique/PhysiqueCheckInScreen.tsx", // Native camera/image picker and share/render integration; physical-device/E2E evidence required
+        "src/screens/physique/PhysiqueIntelligenceScreen.tsx", // Native camera/image picker and share/render integration; physical-device/E2E evidence required
+        "src/screens/program/ProgramDayScreen.tsx", // Known gap: thin screen test; native workout/timer/gesture flow needs broader coverage
       ],
       thresholds: {
-        // v4's v8 provider instruments JSX, optional chains, and ternaries as
-        // additional coverage points, so the same test suite produces lower
-        // percentages than v3. These thresholds are calibrated to v4 measurement.
-        statements: 73,
-        branches: 62,
-        functions: 57,
+        // Ratcheted from the full suite after removing false exclusions.
+        // Each threshold is floor(measured percentage - 1).
+        statements: 80,
+        branches: 73,
+        functions: 78,
       },
     },
     projects: [

@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -61,12 +62,7 @@ for (const [method, path, body] of [
   test(`${method} ${path} rejects X-Engine-Key without Origin`, () => assertRejected(method, path, body));
 }
 test("rejected mutations preserve the DB fixture; internal token lists it", async t => {
-  try {
-    await pool.query("SELECT 1");
-  } catch (error) {
-    t.skip(`Postgres unavailable for route test: ${error.code || "connection error"}`);
-    return;
-  }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const unique = randomUUID();
   let userId;
   try {

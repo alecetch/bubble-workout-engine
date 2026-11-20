@@ -1,5 +1,5 @@
 import { withAuthUser, pool } from "./authHardeningFixtures.js";
-export { pool, skip, log, response } from "./authHardeningFixtures.js";
+export { pool, log, response } from "./authHardeningFixtures.js";
 
 export async function withDeletionUser(fn) {
   return withAuthUser(async user => {

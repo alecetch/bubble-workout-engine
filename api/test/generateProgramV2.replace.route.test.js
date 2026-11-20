@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -8,7 +9,6 @@ import { createGenerateProgramV2Handler } from "../src/routes/generateProgramV2.
 import { makeRequireAuth } from "../src/middleware/requireAuth.js";
 import { makeRequireEntitlement } from "../src/middleware/requireEntitlement.js";
 import { getYearProgress } from "../src/services/yearProgress.js";
-const dbOptions = { skip: !process.env.PGPASSWORD && !process.env.DATABASE_URL ? "requires test database" : false };
 const secret = "replace-program-test-secret-at-least-32-characters";
 const issuer = "replace-program-tests";
 const logs = [];
@@ -70,7 +70,9 @@ async function request(instance, userId, body = {}) {
 }
 async function state(id) { return (await pool.query("SELECT status,is_primary FROM program WHERE id=$1",[id])).rows[0]; }
 
-test("replacement archives atomically while preserving completed/past calendar rows, logs and year count", dbOptions, async t => {
+test("replacement archives atomically while preserving completed/past calendar rows, logs and year count", async t => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid = await user(t); const old = await active(uid);
   const past = await day(old,uid,1,-1,true);
   const today = await day(old,uid,2,0,true);
@@ -94,59 +96,83 @@ test("replacement archives atomically while preserving completed/past calendar r
   assert.equal(before.count,1);
   const entry = logs.findLast(row=>row.event==="program.replaced");
   assert.deepEqual(entry,{event:"program.replaced",replaced_count:1,removed_future_days:1});
+
 });
-for (const flag of [undefined,false,"true",1]) test(`legacy/nonboolean replacement flag (${String(flag)}) retains same-type 409`,dbOptions,async t=>{
+for (const flag of [undefined,false,"true",1]) test(`legacy/nonboolean replacement flag (${String(flag)}) retains same-type 409`,async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const old=await active(uid);
   const result=await request(app(),uid,{replace_active_program:flag});
   assert.equal(result.status,409);assert.equal(result.body.code,"conflict_active_program_same_type");
   assert.equal(result.body.error,"You already have an active strength program. Archive it before generating a new one.");
   assert.equal(result.body.details.active_program_type,"strength");
   assert.deepEqual(await state(old),{status:"active",is_primary:true});
+
 });
-test("goal switch replaces the primary and does not conflict with its dates",dbOptions,async t=>{
+test("goal switch replaces the primary and does not conflict with its dates",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const old=await active(uid,"hypertrophy");await day(old,uid,1,2);
   const result=await request(app(),uid,{replace_active_program:true});
   assert.equal(result.status,200,JSON.stringify(result.body));assert.deepEqual(result.body.replaced_program_ids,[old]);
   assert.equal((await state(old)).status,"archived");
+
 });
-test("another active program still conflicts and archives nothing",dbOptions,async t=>{
+test("another active program still conflicts and archives nothing",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const primary=await active(uid);const other=await active(uid,"conditioning",false);await day(other,uid,1,2);
   const result=await request(app(),uid,{replace_active_program:true});
   assert.equal(result.status,409,JSON.stringify(result.body));assert.equal(result.body.code,"schedule_conflict");
   assert.deepEqual(result.body.details.existing_program_types,["conditioning"]);
   assert.deepEqual(await state(primary),{status:"active",is_primary:true});assert.equal((await state(other)).status,"active");
+
 });
-test("pipeline failure leaves the old plan untouched",dbOptions,async t=>{
+test("pipeline failure leaves the old plan untouched",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const old=await active(uid);const scheduled=await day(old,uid,1,2);
   const result=await request(app({pipeline:async()=>{throw new Error("injected pipeline failure");}}),uid,{replace_active_program:true});
   assert.equal(result.status,500);assert.deepEqual(await state(old),{status:"active",is_primary:true});
   assert.equal((await pool.query("SELECT id FROM program_calendar_day WHERE id=$1",[scheduled.calendar])).rowCount,1);
+
 });
-test("failure after activation rolls back archives and calendar deletion",dbOptions,async t=>{
+test("failure after activation rolls back archives and calendar deletion",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const old=await active(uid);const scheduled=await day(old,uid,1,2);
   const result=await request(app({ensureCalendar:async()=>{throw new Error("injected post-activation failure");}}),uid,{replace_active_program:true});
   assert.equal(result.status,500);assert.deepEqual(await state(old),{status:"active",is_primary:true});
   assert.equal((await pool.query("SELECT id FROM program_calendar_day WHERE id=$1",[scheduled.calendar])).rowCount,1);
   assert.equal((await state(result.body.program_id)).status,"failed");
+
 });
-test("replacement is scoped to the JWT owner and ignores client program IDs",dbOptions,async t=>{
+test("replacement is scoped to the JWT owner and ignores client program IDs",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const a=await user(t);const b=await user(t);const foreign=await active(b);
   const result=await request(app(),a,{replace_active_program:true,user_id:b,program_ids:[foreign]});
   assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.replaced_program_ids,undefined);
   assert.deepEqual(await state(foreign),{status:"active",is_primary:true});
+
 });
 test("generation still requires authentication",async()=>{
   assert.equal((await request(app(),null,{replace_active_program:true})).status,401);
 });
 
-test("replacement includes primary plus same-type secondary and preserves unrelated programs",dbOptions,async t=>{
+test("replacement includes primary plus same-type secondary and preserves unrelated programs",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const primary=await active(uid,"hypertrophy");const same=await active(uid,"strength",false);const other=await active(uid,"conditioning",false);
   await day(primary,uid,1,2);await day(same,uid,1,3);await day(other,uid,1,4);
   const result=await request(app(),uid,{replace_active_program:true});
   assert.equal(result.status,200,JSON.stringify(result.body));assert.deepEqual(result.body.replaced_program_ids.sort(),[primary,same].sort());
   assert.deepEqual(await state(other),{status:"active",is_primary:false});
+
 });
-test("racing replacements leave exactly one active primary and fail the loser cleanly",dbOptions,async t=>{
+test("racing replacements leave exactly one active primary and fail the loser cleanly",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);const old=await active(uid);await day(old,uid,1,2);
   let ready=0;let release;const barrier=new Promise(resolve=>{release=resolve;});
   const db={ connect:()=>pool.connect(), async query(sql,params) {
@@ -160,8 +186,11 @@ test("racing replacements leave exactly one active primary and fail the loser cl
   assert.ok(results.some(result=>[409,500].includes(result.status)));
   const activeRows=(await pool.query("SELECT id,is_primary FROM program WHERE user_id=$1 AND status='active'",[uid])).rows;
   assert.equal(activeRows.length,1);assert.equal(activeRows[0].is_primary,true);assert.notEqual(activeRows[0].id,old);
+
 });
-test("concurrent different-type generation cannot activate overlapping schedules",dbOptions,async t=>{
+test("concurrent different-type generation cannot activate overlapping schedules",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const uid=await user(t);
   let ready=0;let release;const barrier=new Promise(resolve=>{release=resolve;});
   const instance=app({ pipeline:async()=>{if (++ready===2) release();await barrier;return {rows:[{row_type:"PRG"}],program:{weeks:[]}};} });
@@ -169,4 +198,5 @@ test("concurrent different-type generation cannot activate overlapping schedules
   assert.deepEqual(results.map(result=>result.status).sort(),[200,409],JSON.stringify(results));
   assert.equal(results.find(result=>result.status===409).body.code,"schedule_conflict");
   assert.equal((await pool.query("SELECT id FROM program WHERE user_id=$1 AND status='active'",[uid])).rowCount,1);
+
 });

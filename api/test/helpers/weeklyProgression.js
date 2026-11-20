@@ -1,8 +1,8 @@
+import { dbAvailableOrSkip } from "./requireDb.js";
 import { buildInputsFromProfile } from "../../src/services/buildInputsFromProfile.js";
 import { getAllowedExerciseIds } from "../../engine/getAllowedExercises.js";
 export async function ensureWeeklyDb(t, db) {
-  try { await db.query("SELECT 1"); return true; }
-  catch (error) { t.skip(`Postgres unavailable: ${error.code || error.message}`); return false; }
+  return dbAvailableOrSkip(t, db);
 }
 export async function makeWeeklyInputs(db, programType, fitnessLevel) {
   // Same input-building path as emitterSmoke.integration.test.js, with all equipment

@@ -1,6 +1,8 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
 import { trainingProgram, transactionalPool, seedLog } from "../testSupport/trainingFixtures.js";
 import { createReadProgramHandlers } from "../src/routes/readProgram.js";
 import { createSegmentLogHandlers } from "../src/routes/segmentLog.js";
@@ -30,7 +32,9 @@ async function fixture(fn) {
   });
 }
 
-test("multiple completions including bonus day count once on actual date, and uncomplete retains other sessions", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, patch, today }) => {
+test("multiple completions including bonus day count once on actual date, and uncomplete retains other sessions", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, program, user, patch, today }) => {
   let completionIndex = 0;
   for (const day of [program.days[0], program.days[2]]) {
     const res = await patch(day, { local_date: today });
@@ -50,9 +54,12 @@ test("multiple completions including bonus day count once on actual date, and un
   await patch(program.days[2], { is_completed: false });
   assert.equal((await getYearProgress(db, user)).count, 0);
   assert.equal((await db.query("SELECT completed_at FROM program_day WHERE id = $1", [program.days[0]])).rows[0].completed_at, null);
-}));
+});
+});
 
-test("confirmed set without completion counts; uncomplete retains it; later completion cannot move date", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, url, patch, today }) => {
+test("confirmed set without completion counts; uncomplete retains it; later completion cannot move date", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, program, user, url, patch, today }) => {
   const yesterday = offsetLocalDate(today, -1);
   const res = await fetch(`${url}/segment-log`, { method: "POST", headers: { Authorization: `Bearer ${token(user)}`, "Content-Type": "application/json" }, body: JSON.stringify({
     program_id: program.id, program_day_id: program.days[0], workout_segment_id: program.segment, local_date: yesterday,
@@ -63,9 +70,12 @@ test("confirmed set without completion counts; uncomplete retains it; later comp
   await patch(program.days[0], { local_date: today });
   await patch(program.days[0], { is_completed: false });
   assert.deepEqual((await getYearProgress(db, user)).training_dates, [yesterday]);
-}));
+});
+});
 
-test("invalid dates roll back completion and logs; yesterday and old clients work; ownership is enforced", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, other, patch, today, url }) => {
+test("invalid dates roll back completion and logs; yesterday and old clients work; ownership is enforced", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, program, user, other, patch, today, url }) => {
   const invalid = await patch(program.days[0], { local_date: offsetLocalDate(today, -2) });
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, "invalid_local_date");
@@ -81,16 +91,22 @@ test("invalid dates roll back completion and logs; yesterday and old clients wor
   assert.deepEqual((await getYearProgress(db, user)).training_dates, [today]);
   assert.equal((await patch(program.days[1], { local_date: offsetLocalDate(today, -1), timezone: "Pacific/Honolulu" })).status, 200);
   assert.equal((await getYearProgress(db, user)).count, 2);
-}));
+});
+});
 
-test("draft logs alone do not retain a training day", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, patch }) => {
+test("draft logs alone do not retain a training day", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, program, user, patch }) => {
   await seedLog(db, user, program, { draft: true });
   await patch(program.days[0]);
   await patch(program.days[0], { is_completed: false });
   assert.equal((await getYearProgress(db, user)).count, 0);
-}));
+});
+});
 
-test("set-log ownership and client user IDs cannot redirect the ledger; valid zones are remembered", { skip: DATABASE_SKIP }, () => fixture(async ({ db, program, user, other, url }) => {
+test("set-log ownership and client user IDs cannot redirect the ledger; valid zones are remembered", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ db, program, user, other, url }) => {
   const body = { user_id: other, program_id: program.id, program_day_id: program.days[0], workout_segment_id: program.segment,
     timezone: "Asia/Tokyo", rows: [{ program_exercise_id: program.exercise, order_index: 1, reps_completed: 5 }] };
   const post = id => fetch(`${url}/segment-log`, { method: "POST", headers: { Authorization: `Bearer ${token(id)}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -99,4 +115,5 @@ test("set-log ownership and client user IDs cannot redirect the ledger; valid zo
   assert.equal((await getYearProgress(db, other)).count, 0);
   assert.equal((await db.query("SELECT timezone FROM app_user WHERE id = $1", [user])).rows[0].timezone, "Asia/Tokyo");
   assert.equal((await db.query("SELECT count(*) FROM training_session WHERE user_id = $1", [user])).rows[0].count, "1");
-}));
+});
+});

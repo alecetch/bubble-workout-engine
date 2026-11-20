@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -8,10 +9,10 @@ import { mintRestoreToken, _resetForTest } from '../src/hyrox/restoreToken.js';
 import { createHyroxSubmissionDraftHandler, createHyroxSubmissionDraftLimiter } from '../src/hyrox/hyroxSubmissionDraftController.js';
 const originalSecret=process.env.JWT_SECRET;
 const email='restore-private-email@example.test', name='Private Restore Athlete';
-let id, unavailable;
-before(async () => {
+let id;
+before(async t => {
   process.env.JWT_SECRET='restore-integration-secret'; _resetForTest();
-  try { await pool.query('SELECT 1'); } catch(err) { unavailable=err.code; return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   id=(await pool.query(`INSERT INTO hyrox_submissions (email,display_name,sex,age_on_race_day,age_group,division,
     finish_time_seconds,race_name,race_date,splits_json,roxzone_mode,athlete_context_json,performance_context_json,marketing_consent,calculator_mode)
     VALUES ($1,$2,'female',34,'30-34','open',5400,'HYROX London','2026-01-01','[]','none',
@@ -44,13 +45,13 @@ function raceOnly(body) {
   for(const privateValue of [email,name,'private athlete context','performance','marketingConsent','athleteContext','athlete'])assert.ok(!JSON.stringify(body).includes(privateValue));
 }
 test('valid header restores personal details but never consent',async t=>{
-  if(unavailable){t.skip(unavailable);return;}
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const logs=[];const token=mintRestoreToken(id);const res=await read({token,logs});assert.equal(res.status,200);assert.equal(res.headers.get('cache-control'),'no-store');assert.equal(res.headers.get('vary'),'X-Restore-Token');assert.equal(res.body.restoredScope,'full');
   assert.equal(res.body.draft.athlete.email,email);assert.equal(res.body.draft.athlete.name,name);assert.equal(res.body.draft.athlete.gender,'female');
   assert.equal(res.body.draft.athleteContext.additionalContext,'private athlete context');assert.ok(!JSON.stringify(res.body).includes('marketingConsent'));assert.deepEqual(logs,[]);
 });
 for(const mode of ['none','expired','another','tampered','v2','empty','query-token','query-rt'])test(`race-only restore for ${mode}`,async t=>{
-  if(unavailable){t.skip(unavailable);return;}
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const valid=mintRestoreToken(id);let token,query='';
   if(mode==='expired')token=mintRestoreToken(id,{now:Date.now()-31*86400000});
   if(mode==='another')token=mintRestoreToken(randomUUID());
@@ -62,7 +63,7 @@ for(const mode of ['none','expired','another','tampered','v2','empty','query-tok
   assert.ok(!queries[0].match(/s\.(email|display_name|sex|age_on_race_day|age_group|athlete_context_json|performance_context_json|marketing_consent)|analysis_json/));
 });
 test('invalid and unknown IDs retain their status codes',async t=>{
-  if(unavailable){t.skip(unavailable);return;}
+  if (!await dbAvailableOrSkip(t, pool)) return;
   assert.equal((await read({submissionId:'invalid'})).status,400);assert.equal((await read({submissionId:randomUUID()})).status,404);
 });
 test('database errors log only a safe message, never credentials or athlete data',async()=>{

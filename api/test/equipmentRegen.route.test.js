@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -55,13 +56,7 @@ async function withServer(run) {
 }
 
 async function ensureDb(t) {
-  try {
-    await pool.query("SELECT 1");
-    return true;
-  } catch (error) {
-    t.skip(`Postgres unavailable for route test: ${error?.code || error?.message}`);
-    return false;
-  }
+  return dbAvailableOrSkip(t, pool);
 }
 
 async function seedRouteFixture(db) {

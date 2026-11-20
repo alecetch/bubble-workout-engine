@@ -1,7 +1,8 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { pool, skip, log, withAuthUser } from '../testSupport/authHardeningFixtures.js';
+import { pool, log, withAuthUser } from '../testSupport/authHardeningFixtures.js';
 import { PgRateLimitStore } from '../src/middleware/pgRateLimitStore.js';
 process.env.JWT_SECRET ??= 'reset-limit-test-secret-at-least-32-characters';
 const { createPasswordResetLimiters, createForgotPasswordHandler, createResetPasswordHandler } = await import('../src/routes/auth.js');
@@ -39,34 +40,48 @@ async function fixture(fn) {
   });
 }
 
-test('ten forgot requests do not consume reset-code IP allowance', { skip }, () => fixture(async f => {
+test('ten forgot requests do not consume reset-code IP allowance', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   const ip = '192.0.2.101';
   for (let i=0; i<10; i++) assert.equal((await f.request('forgot-password', ip)).status, 200);
   const reset = await f.request('reset-password', ip);
   assert.equal(reset.status, 400); assert.equal(reset.body.code, 'invalid_code');
   const rows = (await pool.query('SELECT key,hits FROM rate_limit_hit WHERE key=ANY($1::text[])', [[`auth:forgot:ip:${ip}`, `auth:reset-code:ip:${ip}`]])).rows;
   assert.deepEqual(Object.fromEntries(rows.map(r => [r.key,r.hits])), { [`auth:forgot:ip:${ip}`]: 10, [`auth:reset-code:ip:${ip}`]: 1 });
-}));
+});
+});
 
-test('twenty reset-code requests do not consume forgot IP allowance', { skip }, () => fixture(async f => {
+test('twenty reset-code requests do not consume forgot IP allowance', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   const ip = '192.0.2.102';
   for (let i=0; i<20; i++) assert.equal((await f.request('reset-password', ip)).status, 400);
   assert.deepEqual(await f.request('forgot-password', ip), { status: 200, body: { ok:true } });
-}));
+});
+});
 
-test('eleventh forgot request is IP-limited with the unchanged body; another IP is unaffected', { skip }, () => fixture(async f => {
+test('eleventh forgot request is IP-limited with the unchanged body; another IP is unaffected', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   for (let i=0; i<10; i++) assert.equal((await f.request('forgot-password', '192.0.2.103')).status, 200);
   assert.deepEqual(await f.request('forgot-password', '192.0.2.103'), { status: 429, body: limited });
   assert.deepEqual(await f.request('forgot-password', '192.0.2.104'), { status: 200, body: { ok:true } });
   await f.drain(); assert.equal(f.emails.length, 3); // Per-address cap still silently applies.
-}));
+});
+});
 
-test('twenty-first reset submission is IP-limited with the unchanged body', { skip }, () => fixture(async f => {
+test('twenty-first reset submission is IP-limited with the unchanged body', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   for (let i=0; i<20; i++) assert.equal((await f.request('reset-password', '192.0.2.105')).status, 400);
   assert.deepEqual(await f.request('reset-password', '192.0.2.105'), { status: 429, body: limited });
-}));
+});
+});
 
-test('one-IP recovery: five wrong codes burn it, resend delivers a fresh code and reset succeeds', { skip }, () => fixture(async f => {
+test('one-IP recovery: five wrong codes burn it, resend delivers a fresh code and reset succeeds', async (t) => {
+  if (!await dbAvailableOrSkip(t, pool)) return;
+  return fixture(async f => {
   const ip = '192.0.2.106';
   assert.equal((await f.request('forgot-password', ip)).status, 200);
   await f.drain(); assert.equal(f.emails.length, 1);
@@ -81,4 +96,5 @@ test('one-IP recovery: five wrong codes burn it, resend delivers a fresh code an
   assert.equal((await f.request('forgot-password', ip)).status, 200);
   await f.drain(); assert.equal(f.emails.length, 2);
   assert.deepEqual(await f.request('reset-password', ip, { code: f.emails[1].code }), { status: 200, body: { ok:true } });
-}));
+});
+});

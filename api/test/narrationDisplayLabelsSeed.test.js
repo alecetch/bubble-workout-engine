@@ -1,15 +1,10 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../src/db.js";
 
 async function ensureDb(t) {
-  try {
-    await pool.query("SELECT 1");
-    return true;
-  } catch (err) {
-    t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-    return false;
-  }
+  return dbAvailableOrSkip(t, pool);
 }
 
 test("active strength and hypertrophy day titles are scoped and contain the correct type word", async (t) => {

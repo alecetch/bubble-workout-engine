@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -48,17 +49,8 @@ async function request(app, path, options = {}) {
 let dbReadyCache = null;
 
 async function dbReady(t) {
-  if (dbReadyCache?.ready) return true;
-  if (dbReadyCache?.reason) {
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    dbReadyCache = { ready: false, reason: "Postgres credentials are not configured for Content Studio route tests." };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  try {
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+
     const tables = await pool.query(`
       SELECT to_regclass('public.cs_race_events') AS races,
              to_regclass('public.cs_athletes') AS athletes,
@@ -68,16 +60,13 @@ async function dbReady(t) {
     const row = tables.rows[0] ?? {};
     if (!row.races || !row.athletes || !row.jobs || !row.items) {
       dbReadyCache = { ready: false, reason: "Content Studio V109 migration is not applied in this database." };
+      if (process.env.REQUIRE_DB === "true") throw new Error(dbReadyCache.reason);
       t.skip(dbReadyCache.reason);
       return false;
     }
     dbReadyCache = { ready: true };
     return true;
-  } catch (err) {
-    dbReadyCache = { ready: false, reason: `Postgres unavailable for Content Studio route test: ${err?.code || err?.message}` };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
+
 }
 
 test.after(async () => {

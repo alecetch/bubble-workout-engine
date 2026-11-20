@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -45,8 +46,7 @@ for (const [label, currentId, rank, equipment] of [
   ['rank ceilings exclude regressions', 'pushup', 2, ['bodyweight', 'pullup_bar', 'resistance_band']],
 ]) {
   test(`swap options use live catalogue eligibility: ${label}`, async t => {
-    try { await pool.query('SELECT 1'); }
-    catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return; }
+    if (!await dbAvailableOrSkip(t, pool)) return;
     const client = { release() {}, async query(sql, params) {
       if (sql.includes('pe.id AS program_exercise_id')) return { rowCount: 1, rows: [{ exercise_id: currentId, program_day_id: VALID_UUID }] };
       if (/FROM client_profile\s+WHERE/.test(sql)) return { rowCount: 1, rows: [{ fitness_rank: rank, injury_flags_slugs: ['Wrist / Elbow'], equipment_items_slugs: equipment }] };

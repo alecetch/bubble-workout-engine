@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
@@ -8,11 +9,8 @@ after(() => pool.end());
 let reportPromise;
 let dbCheck;
 async function ensureDb(t) {
-  dbCheck ??= pool.query('SELECT 1').then(() => null, err => err);
-  const err = await dbCheck;
-  if (!err) return true;
-  t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-  return false;
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+return true;
 }
 async function cells(t) {
   if (!(await ensureDb(t))) return null;

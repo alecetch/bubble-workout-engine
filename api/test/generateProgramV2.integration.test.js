@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../src/db.js";
@@ -60,12 +61,7 @@ async function cleanupTestUser(db) {
 }
 
 test("generate-plan-v2: profile found -> pipeline called -> 200 response with program", async (t) => {
-  try {
-    await pool.query("SELECT 1");
-  } catch (error) {
-    t.skip(`Postgres unavailable for smoke test: ${error?.code || error?.message}`);
-    return;
-  }
+  if (!await dbAvailableOrSkip(t, pool)) return;
 
   await seedTestUser(pool);
 
@@ -159,7 +155,7 @@ test("generate-plan-v2: profile found -> pipeline called -> 200 response with pr
 });
 
 test("generated strength weeks deliver build sets, final deload and higher RIR", async t => {
-  try { await pool.query("SELECT 1"); } catch (e) { t.skip(`Postgres unavailable: ${e.code}`); return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const subject = `weekly-route-${Date.now()}`;
   const user = (await pool.query("INSERT INTO app_user(subject_id) VALUES ($1) RETURNING id", [subject])).rows[0];
   try {

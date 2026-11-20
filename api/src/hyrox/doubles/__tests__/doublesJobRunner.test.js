@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../../../../test/helpers/requireDb.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { pool } from "../../../db.js";
@@ -6,30 +7,18 @@ import { finalizeJobStatus } from "../doublesJobRunner.js";
 let dbReadyCache = null;
 
 async function dbReady(t) {
-  if (dbReadyCache?.ready) return true;
-  if (dbReadyCache?.reason) {
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    dbReadyCache = { ready: false, reason: "Postgres credentials are not configured for doublesJobRunner tests." };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  try {
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+
     const result = await pool.query("SELECT to_regclass('public.hyrox_doubles_scrape_jobs') AS jobs");
     if (!result.rows[0]?.jobs) {
       dbReadyCache = { ready: false, reason: "hyrox_doubles_scrape_jobs table is not present in this database." };
+      if (process.env.REQUIRE_DB === "true") throw new Error(dbReadyCache.reason);
       t.skip(dbReadyCache.reason);
       return false;
     }
     dbReadyCache = { ready: true };
     return true;
-  } catch (err) {
-    dbReadyCache = { ready: false, reason: `Postgres unavailable for doublesJobRunner test: ${err?.code || err?.message}` };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
+
 }
 
 test.after(async () => {

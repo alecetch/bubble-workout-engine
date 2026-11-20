@@ -41,6 +41,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      REQUIRE_DB: "true"
 
     services:
       postgres:

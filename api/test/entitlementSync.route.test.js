@@ -1,14 +1,18 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createUserEntitlementRouter } from "../src/routes/userEntitlement.js";
 import { syncUserEntitlement } from "../src/services/revenuecatSync.js";
 import { createEntitlementSyncRateLimiter } from "../src/middleware/rateLimits.js";
-import { DATABASE_SKIP, future, past, auth, token, closeDb, withUsers, withApp, paidSubscriber, rcFetch } from "../testSupport/entitlementFixtures.js";
+import { future, past, auth, token, closeDb, withUsers, withApp, paidSubscriber, rcFetch } from "../testSupport/entitlementFixtures.js";
 
 test.after(closeDb);
 const headers = id => ({ Authorization: `Bearer ${token(id)}`, "Content-Type": "application/json" });
 
-test("sync is authenticated, returns GET's shape and only updates the caller", { skip: DATABASE_SKIP }, async () => {
+test("sync is authenticated, returns GET's shape and only updates the caller", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user, other]) => {
     await withApp(app => app.use("/api", auth, createUserEntitlementRouter({ db, syncDeps: {
       apiKey: "secret-test-key", fetchImpl: async (url, options) => {
@@ -29,6 +33,7 @@ test("sync is authenticated, returns GET's shape and only updates the caller", {
       assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1", [other])).rows[0].subscription_status, "expired");
     });
   });
+
 });
 
 for (const [name, deps, status, code] of [
@@ -36,7 +41,9 @@ for (const [name, deps, status, code] of [
   ["RevenueCat error", { apiKey: "key", fetchImpl: async () => ({ ok: false, status: 503 }) }, 502, "entitlement_sync_failed"],
   ["malformed subscriber", { apiKey: "key", fetchImpl: async () => ({ ok: true, json: async () => ({}) }) }, 502, "entitlement_sync_failed"],
 ]) {
-  test(`${name} leaves the complete user row untouched`, { skip: DATABASE_SKIP }, async () => {
+  test(`${name} leaves the complete user row untouched`, async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
     await withUsers(async (db, [user]) => {
       const before = (await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0];
       await withApp(app => app.use("/api", auth, createUserEntitlementRouter({ db, syncDeps: deps })), async base => {
@@ -46,10 +53,13 @@ for (const [name, deps, status, code] of [
       });
       assert.deepEqual((await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0], before);
     });
-  });
+
+});
 }
 
-test("sync preserves a live trial without purchases but upgrades a trial with a purchase", { skip: DATABASE_SKIP }, async () => {
+test("sync preserves a live trial without purchases but upgrades a trial with a purchase", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     await db.query("UPDATE app_user SET subscription_status='trialing', trial_expires_at=$2 WHERE id=$1", [user, future]);
     const first = await syncUserEntitlement(db, user, { apiKey: "key", fetchImpl: rcFetch({}) });
@@ -60,9 +70,12 @@ test("sync preserves a live trial without purchases but upgrades a trial with a 
     assert.equal(second.status, "active");
     assert.equal(second.isPaid, true);
   });
+
 });
 
-for (const eventOffset of [-1000, 1]) test(`a webhook arriving during fetch wins over sync (event offset ${eventOffset})`, { skip: DATABASE_SKIP }, async () => {
+for (const eventOffset of [-1000, 1]) test(`a webhook arriving during fetch wins over sync (event offset ${eventOffset})`, async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const now = new Date();
     await db.query("UPDATE app_user SET subscription_event_at=$2 WHERE id=$1", [user, new Date(now.getTime() - 2000)]);
@@ -74,9 +87,12 @@ for (const eventOffset of [-1000, 1]) test(`a webhook arriving during fetch wins
     assert.equal(result.status, "active");
     assert.equal(result.reason, "stale_event");
   });
+
 });
 
-test("lapsed cancelled rows are lazily expired", { skip: DATABASE_SKIP }, async () => {
+test("lapsed cancelled rows are lazily expired", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     await db.query("UPDATE app_user SET subscription_status='cancelled', subscription_expires_at=$2 WHERE id=$1", [user, past]);
     await withApp(app => app.use("/api", auth, createUserEntitlementRouter({ db })), async base => {
@@ -85,9 +101,12 @@ test("lapsed cancelled rows are lazily expired", { skip: DATABASE_SKIP }, async 
       assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1", [user])).rows[0].subscription_status, "expired");
     });
   });
+
 });
 
-test("lazy expiration does not overwrite a concurrent paid-period extension", { skip: DATABASE_SKIP }, async () => {
+test("lazy expiration does not overwrite a concurrent paid-period extension", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     await db.query("UPDATE app_user SET subscription_status='cancelled', subscription_expires_at=$2 WHERE id=$1", [user, past]);
     const racingDb = { query: async (sql, params) => {
@@ -102,9 +121,12 @@ test("lazy expiration does not overwrite a concurrent paid-period extension", { 
       assert.equal(result.is_premium, true);
     });
   });
+
 });
 
-test("a timed-out sync leaves the row untouched", { skip: DATABASE_SKIP }, async () => {
+test("a timed-out sync leaves the row untouched", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const before = (await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0];
     await withApp(app => app.use("/api", auth, createUserEntitlementRouter({ db, syncDeps: {
@@ -115,6 +137,7 @@ test("a timed-out sync leaves the row untouched", { skip: DATABASE_SKIP }, async
     });
     assert.deepEqual((await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0], before);
   });
+
 });
 
 test("sync limiter allows five requests per minute per user", async () => {

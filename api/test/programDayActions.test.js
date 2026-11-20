@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +8,7 @@ import express from 'express';
 after(() => pool.end());
 const response = () => ({ statusCode: 200, status(n) { this.statusCode = n; return this; }, json(body) { this.body = body; return this; } });
 async function fixture(t) {
-  try { await pool.query('SELECT 1'); } catch (e) { t.skip(`Postgres unavailable: ${e.code}`); return; }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const user = (await pool.query('INSERT INTO app_user (subject_id) VALUES ($1) RETURNING id', [`substitution-${randomUUID()}`])).rows[0].id;
   t.after(async () => { await pool.query('DELETE FROM program WHERE user_id=$1', [user]); await pool.query('DELETE FROM app_user WHERE id=$1', [user]); });
   await pool.query("INSERT INTO client_profile (user_id, fitness_level_slug) VALUES ($1, 'intermediate')", [user]);

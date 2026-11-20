@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -7,13 +8,7 @@ import { INJURY_FLAG_OPTIONS } from "../src/utils/injuryFlags.js";
 after(() => pool.end());
 
 async function ensureDb(t) {
-  try {
-    await pool.query("SELECT 1");
-    return true;
-  } catch (err) {
-    t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-    return false;
-  }
+  return dbAvailableOrSkip(t, pool);
 }
 
 async function withUser(fn) {

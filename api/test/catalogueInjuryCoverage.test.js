@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
@@ -7,11 +8,8 @@ import { getAllowedExerciseIds } from '../engine/getAllowedExercises.js';
 after(() => pool.end());
 let dbCheck;
 async function ensureDb(t) {
-  dbCheck ??= pool.query('SELECT 1').then(() => null, err => err);
-  const err = await dbCheck;
-  if (!err) return true;
-  t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`);
-  return false;
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+return true;
 }
 
 for (const flag of ['shoulder_issues', 'knee_issues', 'lower_back_spine', 'ankle_foot', 'wrist_elbow', 'cardiovascular_limitations']) {

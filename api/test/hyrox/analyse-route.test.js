@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../helpers/requireDb.js";
 import assert from "node:assert/strict";
 import express from "express";
 import test from "node:test";
@@ -84,18 +85,8 @@ async function request(app, path, options = {}) {
 let dbReadyCache = null;
 
 async function dbReady(t) {
-  if (dbReadyCache?.ready) return true;
-  if (dbReadyCache?.reason) {
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    dbReadyCache = { ready: false, reason: "Postgres credentials are not configured for HYROX route integration tests." };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  try {
-    await pool.query("SELECT 1");
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+
     const tables = await pool.query(`
       SELECT to_regclass('public.hyrox_submissions') AS submissions,
              to_regclass('public.hyrox_analyses') AS analyses,
@@ -104,16 +95,13 @@ async function dbReady(t) {
     const row = tables.rows[0] ?? {};
     if (!row.submissions || !row.analyses || !row.email_log) {
       dbReadyCache = { ready: false, reason: "HYROX V100-V102 migrations are not applied in this database." };
+      if (process.env.REQUIRE_DB === "true") throw new Error(dbReadyCache.reason);
       t.skip(dbReadyCache.reason);
       return false;
     }
     dbReadyCache = { ready: true };
     return true;
-  } catch (err) {
-    dbReadyCache = { ready: false, reason: `Postgres unavailable for HYROX route test: ${err?.code || err?.message}` };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
+
 }
 
 async function waitForEmailLog(submissionId) {
@@ -301,10 +289,7 @@ test("division:doubles returns complete analysis benchmarked as open", async (t)
 });
 
 test("GET /api/hyrox/health returns status and non-negative benchmark count", async (t) => {
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    t.skip("Postgres credentials are not configured for HYROX health integration test.");
-    return;
-  }
+  if (!await dbAvailableOrSkip(t, pool)) return;
   const { response, body: json } = await request(buildApp(), "/api/hyrox/health");
   assert.equal(response.status, 200);
   assert.ok(["ok", "degraded"].includes(json.status));

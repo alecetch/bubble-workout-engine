@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -5,8 +6,7 @@ import { pool } from '../src/db.js';
 
 after(() => pool.end());
 async function ensureDb(t) {
-  try { await pool.query('SELECT 1'); return true; }
-  catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return false; }
+  return dbAvailableOrSkip(t, pool);
 }
 
 test('lower-back stretches cover glutes with ready media and clear cues', async t => {

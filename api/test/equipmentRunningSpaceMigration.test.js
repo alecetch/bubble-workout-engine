@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -11,8 +12,7 @@ const migrationUrl = [
 const migration = readFileSync(migrationUrl, 'utf8');
 after(() => pool.end());
 async function ensureDb(t) {
-  try { await pool.query('SELECT 1'); return true; }
-  catch (err) { t.skip(`Postgres unavailable: ${err?.code || err?.message || err}`); return false; }
+  return dbAvailableOrSkip(t, pool);
 }
 
 test('running-space migration updates profiles and day overrides by preset and is idempotent', async t => {

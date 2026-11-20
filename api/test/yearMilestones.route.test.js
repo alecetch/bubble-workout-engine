@@ -1,12 +1,16 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, withApp, auth, token, closeDb } from "../testSupport/entitlementFixtures.js";
 import { transactionalPool } from "../testSupport/trainingFixtures.js";
 import { createYearMilestoneHandlers } from "../src/routes/yearMilestones.js";
 import { createYearProgressHandler } from "../src/routes/yearProgress.js";
 
 after(closeDb);
-test("milestone acknowledgement and claim are authenticated and caller-scoped", { skip: DATABASE_SKIP }, () => withUsers(async (db, [user, other]) => {
+test("milestone acknowledgement and claim are authenticated and caller-scoped", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async (db, [user, other]) => {
   const row = (await db.query(`INSERT INTO year_milestone (user_id,year,slug,threshold,reached_on)
     VALUES ($1,2026,'day_1',1,'2026-01-01') RETURNING id`, [user])).rows[0];
   const handlers = createYearMilestoneHandlers(transactionalPool(db));
@@ -30,4 +34,5 @@ test("milestone acknowledgement and claim are authenticated and caller-scoped", 
     assert.deepEqual(after.unseen_milestones, []);
     assert.deepEqual(after.milestones, [{ slug: "day_1", threshold: 1, reached_on: "2026-01-01" }]);
   });
-}));
+});
+});

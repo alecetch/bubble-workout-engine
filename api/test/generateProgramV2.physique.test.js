@@ -1,11 +1,13 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 ﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { pool } from "../src/db.js";
 import { createGenerateProgramV2Handler } from "../src/routes/generateProgramV2.js";
-const dbOptions={skip:!process.env.PGPASSWORD&&!process.env.DATABASE_URL?"requires test database":false};
 test.after(async()=>{await pool.end();});
-test("disabled physique rows cannot affect generation inputs; enabling restores context",dbOptions,async t=>{
+test("disabled physique rows cannot affect generation inputs; enabling restores context",async t=>{
+  if (!await dbAvailableOrSkip(t, pool)) return;
+
   const previous=process.env.PHYSIQUE_ENABLED;delete process.env.PHYSIQUE_ENABLED;
   t.after(()=>{if(previous===undefined) delete process.env.PHYSIQUE_ENABLED;else process.env.PHYSIQUE_ENABLED=previous;});
   const profiles=new Map();const users=[];
@@ -25,4 +27,5 @@ test("disabled physique rows cannot affect generation inputs; enabling restores 
   process.env.PHYSIQUE_ENABLED="true";
   await handler({auth:{user_id:users[0]},body:{programType:"strength"},log:{info(){},debug(){},warn(){},error(){}}},{status(){return this;},json(){return this;}});
   assert.equal(lookups,1);assert.deepEqual(inputs[2].physiqueContext.emphasisWeights,{chest:1.5});
+
 });

@@ -1,6 +1,8 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { DATABASE_SKIP, withUsers, withApp, closeDb } from "../testSupport/entitlementFixtures.js";
+import { withUsers, withApp, closeDb } from "../testSupport/entitlementFixtures.js";
 import { trainingProgram } from "../testSupport/trainingFixtures.js";
 import { createWorkoutRemindersHandler } from "../src/routes/workoutReminders.js";
 import { makeNotificationService } from "../src/services/notificationService.js";
@@ -34,7 +36,9 @@ async function setup(db, ids) {
   return programs;
 }
 
-test("real reminder SQL combines once, stamps both dates, and suppresses repeats", { skip: DATABASE_SKIP }, async t => {
+test("real reminder SQL combines once, stamps both dates, and suppresses repeats", async t => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   const messages = [];
   t.mock.method(globalThis, "fetch", async (_url, options) => {
     messages.push(JSON.parse(options.body));
@@ -64,9 +68,12 @@ test("real reminder SQL combines once, stamps both dates, and suppresses repeats
     await handler({}, res());
     assert.equal(messages.length, 1);
   });
+
 });
 
-test("rest nudges respect disabled reminders and the seven-day boundary", { skip: DATABASE_SKIP }, async t => {
+test("rest nudges respect disabled reminders and the seven-day boundary", async t => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   const messages = [];
   t.mock.method(globalThis, "fetch", async (_url, options) => { messages.push(JSON.parse(options.body)); return { json: async () => ({ data: { status: "ok" } }) }; });
   await withUsers(async (db, ids) => {
@@ -86,9 +93,12 @@ test("rest nudges respect disabled reminders and the seven-day boundary", { skip
     await handler({}, res());
     assert.equal(messages.length, 2);
   });
+
 });
 
-test("all notification kinds share an atomic daily reservation", { skip: DATABASE_SKIP }, async t => {
+test("all notification kinds share an atomic daily reservation", async t => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   let pushes = 0;
   t.mock.method(globalThis, "fetch", async () => { pushes++; return { json: async () => ({ data: { status: "ok" } }) }; });
   await withUsers(async (db, [user]) => {
@@ -102,9 +112,12 @@ test("all notification kinds share an atomic daily reservation", { skip: DATABAS
     assert.equal(results.filter(r => r.sent).length, 1);
     assert.equal((await db.query("SELECT last_reminder_sent_date::text FROM notification_preference WHERE user_id = $1", [user])).rows[0].last_reminder_sent_date, "2026-07-02");
   });
+
 });
 
-test("internal reminder route rejects absent/incorrect tokens", { skip: DATABASE_SKIP }, async () => {
+test("internal reminder route rejects absent/incorrect tokens", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   const original = process.env.INTERNAL_API_TOKEN;
   process.env.INTERNAL_API_TOKEN = "pace-reminder-test-token";
   try {
@@ -113,9 +126,12 @@ test("internal reminder route rejects absent/incorrect tokens", { skip: DATABASE
       assert.equal((await fetch(`${url}/reminders`, { method: "POST", headers: { "x-internal-token": process.env.INTERNAL_API_TOKEN } })).status, 200);
     });
   } finally { if (original === undefined) delete process.env.INTERNAL_API_TOKEN; else process.env.INTERNAL_API_TOKEN = original; }
+
 });
 
-test("users with email but no push token get no reminders or reservation", { skip: DATABASE_SKIP }, async t => {
+test("users with email but no push token get no reminders or reservation", async t => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   let pushes = 0;
   t.mock.method(globalThis, "fetch", async () => { pushes++; throw Error("unexpected send"); });
   await withUsers(async (db, ids) => {
@@ -127,4 +143,5 @@ test("users with email but no push token get no reminders or reservation", { ski
     assert.equal(pushes, 0);
     assert.equal(Number((await db.query("SELECT count(*) FROM notification_preference WHERE user_id = ANY($1::uuid[])", [ids])).rows[0].count), 0);
   });
+
 });

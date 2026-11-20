@@ -1,10 +1,12 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWebhookRevenuecatHandler } from "../src/routes/webhookRevenuecat.js";
 import { randomUUID } from "node:crypto";
 import { computeEntitlement } from "../src/services/entitlement.js";
 import { makeReferralRewardService } from '../src/services/referralRewardService.js';
-import { DATABASE_SKIP, future, past, closeDb, withUsers, paidSubscriber, rcFetch } from "../testSupport/entitlementFixtures.js";
+import { future, past, closeDb, withUsers, paidSubscriber, rcFetch } from "../testSupport/entitlementFixtures.js";
 
 const ORIGINAL_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
 const TEST_SECRET = "test-webhook-secret-abc123";
@@ -57,21 +59,27 @@ test.after(() => {
 });
 test.after(closeDb);
 
-for (const type of ["RENEWAL", "EXPIRATION"]) test(`deleted user's ${type} is acknowledged without recreating the user`, { skip: DATABASE_SKIP }, () => withUsers(async db => {
+for (const type of ["RENEWAL", "EXPIRATION"]) test(`deleted user's ${type} is acknowledged without recreating the user`, async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async db => {
   const id = randomUUID(), res = mockRes();
   await makeHandler(db)(validReq(type, { app_user_id: id, original_app_user_id: id }), res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.handled, false); assert.equal(res.body.reason, "unknown_user");
   assert.equal((await db.query("SELECT id FROM app_user WHERE id=$1", [id])).rowCount, 0);
-}));
+});
+});
 
-test('qualifying webhook records pending conversion without changing response', { skip: DATABASE_SKIP }, () => withUsers(async (db, [referrer, referred]) => {
+test('qualifying webhook records pending conversion without changing response', async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return withUsers(async (db, [referrer, referred]) => {
   await db.query("INSERT INTO referral_conversion(referrer_user_id,referred_user_id,referred_code) VALUES ($1,$2,'CODE')", [referrer, referred]);
   const res = mockRes(); const req = validReq('INITIAL_PURCHASE', { app_user_id: referred, environment: 'PRODUCTION', period_type: 'NORMAL', id: randomUUID() });
   await makeHandler(db, { referralRewards: makeReferralRewardService({ db }) })(req, res);
   assert.equal(res.statusCode, 200); assert.deepEqual(res.body, { ok: true, handled: true, type: 'INITIAL_PURCHASE', new_status: 'active' });
   assert.equal((await db.query('SELECT reward_status FROM referral_conversion WHERE referred_user_id=$1', [referred])).rows[0].reward_status, 'pending');
-}));
+});
+});
 
 test('referral hook runs on stale events and failures leave webhook response unchanged', async () => {
   for (const stale of [false, true]) {
@@ -204,7 +212,9 @@ test("revenuecat webhook: unhandled event type returns handled false without DB 
 });
 
 for (const [type, expected] of [["INITIAL_PURCHASE", "active"], ["RENEWAL", "active"], ["UNCANCELLATION", "active"], ["PRODUCT_CHANGE", "active"], ["CANCELLATION", "cancelled"], ["BILLING_ISSUE", "billing_issue"], ["EXPIRATION", "expired"]]) {
-  test(`${type} persists lifecycle state and keeps paid-through access`, { skip: DATABASE_SKIP }, async () => {
+  test(`${type} persists lifecycle state and keeps paid-through access`, async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
     await withUsers(async (db, [user]) => {
       await db.query("UPDATE app_user SET subscription_status='cancelled', subscription_expires_at=$2 WHERE id=$1", [user, future]);
       const req = validReq(type, { app_user_id: user, expiration_at_ms: Date.parse(future), grace_period_expiration_at_ms: Date.parse(future) + 86_400_000 });
@@ -216,12 +226,21 @@ for (const [type, expected] of [["INITIAL_PURCHASE", "active"], ["RENEWAL", "act
       assert.equal(row.subscription_status, expected);
       assert.equal(row.subscription_expires_at.getTime(), type === "BILLING_ISSUE" ? Date.parse(future) + 86_400_000 : Date.parse(future));
       assert.equal(computeEntitlement(row).isEntitled, expected !== "expired");
+      if (type === "BILLING_ISSUE") {
+        const end = row.subscription_expires_at.getTime();
+        assert.equal(computeEntitlement(row, new Date(end - 1)).isEntitled, true);
+        assert.equal(computeEntitlement(row, new Date(end)).isEntitled, false);
+        assert.equal(computeEntitlement(row, new Date(end + 1)).isEntitled, false);
+      }
       assert.equal(row.subscription_event_at.getTime(), req.body.event.event_timestamp_ms);
     });
-  });
+
+});
 }
 
-test("out-of-order and duplicate events are acknowledged without overwriting renewal", { skip: DATABASE_SKIP }, async () => {
+test("out-of-order and duplicate events are acknowledged without overwriting renewal", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const handler = makeHandler(db);
     const ts = Date.now();
@@ -235,9 +254,12 @@ test("out-of-order and duplicate events are acknowledged without overwriting ren
     }
     assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1", [user])).rows[0].subscription_status, "active");
   });
+
 });
 
-test("TRANSFER without app_user_id updates all UUID targets with the no-key fallback", { skip: DATABASE_SKIP }, async () => {
+test("TRANSFER without app_user_id updates all UUID targets with the no-key fallback", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [from, to]) => {
     await db.query("UPDATE app_user SET subscription_status='active', subscription_expires_at=$2 WHERE id=$1", [from, future]);
     await db.query("UPDATE app_user SET subscription_expires_at=$2 WHERE id=$1", [to, past]);
@@ -251,9 +273,12 @@ test("TRANSFER without app_user_id updates all UUID targets with the no-key fall
     assert.equal(rows.find(row => row.id === to).subscription_status, "active");
     assert.equal(computeEntitlement(rows.find(row => row.id === to)).isEntitled, true);
   });
+
 });
 
-test("TRANSFER syncs both sides and a stale transfer never overwrites newer state", { skip: DATABASE_SKIP }, async () => {
+test("TRANSFER syncs both sides and a stale transfer never overwrites newer state", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [from, to]) => {
     const calls = [];
     const handler = makeHandler(db, { syncDeps: { apiKey: "key", fetchImpl: async url => {
@@ -269,6 +294,7 @@ test("TRANSFER syncs both sides and a stale transfer never overwrites newer stat
     assert.equal(stale.body.reason, "stale_event");
     assert.equal(calls.length, 2);
   });
+
 });
 
 test("anonymous IDs, TEST and unhandled events are 200 without DB access", async () => {
@@ -284,16 +310,21 @@ test("anonymous IDs, TEST and unhandled events are 200 without DB access", async
   assert.equal(logs[0].event, "revenuecat.webhook.non_uuid_app_user_id");
 });
 
-test("unknown UUID is acknowledged as unknown_user", { skip: DATABASE_SKIP }, async () => {
+test("unknown UUID is acknowledged as unknown_user", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async db => {
     const res = mockRes();
     await makeHandler(db)(validReq("RENEWAL", { app_user_id: randomUUID() }), res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.reason, "unknown_user");
   });
+
 });
 
-test("transfer target aliases are deduplicated case-insensitively and destination wins", { skip: DATABASE_SKIP }, async () => {
+test("transfer target aliases are deduplicated case-insensitively and destination wins", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const res = mockRes();
     await makeHandler(db, { syncDeps: { apiKey: "" } })(validReq("TRANSFER", {
@@ -302,9 +333,12 @@ test("transfer target aliases are deduplicated case-insensitively and destinatio
     assert.equal(res.body.handled, true);
     assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1", [user])).rows[0].subscription_status, "active");
   });
+
 });
 
-test("transfer upstream failure returns 503 so RevenueCat retries, without changing local state", { skip: DATABASE_SKIP }, async () => {
+test("transfer upstream failure returns 503 so RevenueCat retries, without changing local state", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [user]) => {
     const before = (await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0];
     const res = mockRes();
@@ -315,9 +349,12 @@ test("transfer upstream failure returns 503 so RevenueCat retries, without chang
     assert.equal(res.body.code, "transfer_sync_failed");
     assert.deepEqual((await db.query("SELECT * FROM app_user WHERE id=$1", [user])).rows[0], before);
   });
+
 });
 
-test("normal events retain customer metadata without alias collisions after transfer", { skip: DATABASE_SKIP }, async () => {
+test("normal events retain customer metadata without alias collisions after transfer", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+
   await withUsers(async (db, [from, to]) => {
     const original = `rc-${from}`;
     const handler = makeHandler(db);
@@ -329,6 +366,7 @@ test("normal events retain customer metadata without alias collisions after tran
     assert.equal(res.body.handled, true);
     assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1", [to])).rows[0].subscription_status, "active");
   });
+
 });
 
 test("malformed timestamps are 400 while genuine DB failures remain 500", async () => {
@@ -341,4 +379,16 @@ test("malformed timestamps are 400 while genuine DB failures remain 500", async 
   const res = mockRes();
   await handler(validReq("RENEWAL"), res);
   assert.equal(res.statusCode, 500);
+});
+
+test("RENEWAL after a persisted CANCELLATION reactivates the user", async t => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  await withUsers(async (db,[user]) => {
+    const handler=makeHandler(db);const timestamp=Date.now();
+    await handler(validReq("CANCELLATION",{app_user_id:user,event_timestamp_ms:timestamp,expiration_at_ms:Date.parse(future)}),mockRes());
+    assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1",[user])).rows[0].subscription_status,"cancelled");
+    const res=mockRes();await handler(validReq("RENEWAL",{app_user_id:user,event_timestamp_ms:timestamp+1,expiration_at_ms:Date.parse(future)}),res);
+    assert.equal(res.statusCode,200);assert.equal(res.body.new_status,"active");
+    assert.equal((await db.query("SELECT subscription_status FROM app_user WHERE id=$1",[user])).rows[0].subscription_status,"active");
+  });
 });

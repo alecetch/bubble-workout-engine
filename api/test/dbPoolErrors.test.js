@@ -1,3 +1,5 @@
+import { pool as requiredDbPool } from "../src/db.js";
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -5,7 +7,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { createPool } from "../src/db.js";
 
-const skip = !(process.env.PGPASSWORD || process.env.DATABASE_URL) && "requires test database";
 const connection = process.env.DATABASE_URL
   ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
   : {};
@@ -51,16 +52,21 @@ async function terminate(control, applicationName) {
   assert.equal(result.rows[0].terminated, true);
 }
 
-test("idle backend termination is handled and the pool keeps serving queries", { skip }, () => fixture(async ({ pool, control, warnings, breadcrumbs, applicationName }) => {
+test("idle backend termination is handled and the pool keeps serving queries", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ pool, control, warnings, breadcrumbs, applicationName }) => {
   await pool.query("SELECT 1");
   const error = event(pool, "error");
   await terminate(control, applicationName);
   assert.equal((await error).code, "57P01");
   assert.deepEqual(warnings.map(w => w.event), ["db.pool.idle_client_error"]);
   assert.deepEqual(breadcrumbs, [{ category: "db", level: "warning", message: "57P01" }]);
-}));
+});
+});
 
-test("checked-out backend termination is handled between queries", { skip }, () => fixture(async ({ pool, control, warnings, applicationName }) => {
+test("checked-out backend termination is handled between queries", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ pool, control, warnings, applicationName }) => {
   const client = await pool.connect();
   try {
     const error = event(client, "error");
@@ -68,9 +74,12 @@ test("checked-out backend termination is handled between queries", { skip }, () 
     assert.equal((await error).code, "57P01");
     assert.equal(warnings[0].event, "db.client.error");
   } finally { client.release(true); }
-}));
+});
+});
 
-test("terminating a running query still rejects the query", { skip }, () => fixture(async ({ pool, control, applicationName }) => {
+test("terminating a running query still rejects the query", async (t) => {
+  if (!await dbAvailableOrSkip(t, requiredDbPool)) return;
+  return fixture(async ({ pool, control, applicationName }) => {
   const client = await pool.connect();
   try {
     const error = event(client, "error");
@@ -88,7 +97,8 @@ test("terminating a running query still rejects the query", { skip }, () => fixt
     await rejected;
     await error;
   } finally { client.release(true); }
-}));
+});
+});
 
 test("warnings are limited per code for ten seconds and report suppressed counts", async () => {
   let now = 0;
@@ -108,3 +118,5 @@ test("warnings are limited per code for ten seconds and report suppressed counts
     assert.deepEqual(Object.keys(warnings[0]).sort(), ["code", "event", "message", "suppressed"]);
   } finally { await pool.end(); }
 });
+
+test.after(() => requiredDbPool.end());

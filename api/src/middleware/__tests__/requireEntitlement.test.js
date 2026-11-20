@@ -73,7 +73,6 @@ test("user not found returns 404", async () => {
   assert.equal(res._status, 404);
 });
 
-
 for (const status of ["cancelled", "billing_issue"]) {
   for (const future of [true, false]) {
     test(`${status} with ${future ? "future" : "past"} expiry uses paid-through access`, async () => {
@@ -86,3 +85,11 @@ for (const status of ["cancelled", "billing_issue"]) {
     });
   }
 }
+
+test("database outage fails closed without stack or database detail", async () => {
+  const mw=makeRequireEntitlement({async query(){throw new Error("private database detail\n at database.query");}});
+  const res=makeRes();let called=false;
+  await mw(makeReq("u1"),res,()=>{called=true;});
+  assert.equal(called,false);assert.ok([500,503].includes(res._status));
+  assert.ok(!JSON.stringify(res._body).includes("database.query"));assert.ok(!JSON.stringify(res._body).includes("private database detail"));
+});

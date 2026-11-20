@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import { runPipeline } from "../engine/runPipeline.js";
 import { parseEmitterRows } from "../src/services/importEmitterService.js";
 import { makeWeeklyInputs } from "./helpers/weeklyProgression.js";
@@ -21,13 +22,7 @@ function nextWeekday(targetDow) {
 }
 
 async function ensureDb(t) {
-  try {
-    await pool.query("SELECT 1");
-    return true;
-  } catch (error) {
-    t.skip(`Postgres unavailable for integration test: ${error?.code || error?.message}`);
-    return false;
-  }
+  return dbAvailableOrSkip(t, pool);
 }
 
 async function seedProgramFixture(db) {

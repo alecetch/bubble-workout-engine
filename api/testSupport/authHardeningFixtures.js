@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from '../src/db.js';
 export { pool };
-export const skip = !(process.env.PGPASSWORD || process.env.DATABASE_URL) && 'requires test database';
 export const log = { info() {}, error() {}, warn() {} };
 export const response = () => ({ statusCode: 200, status(code) { this.statusCode=code;return this; }, json(body) { this.body=body;return this; } });
 export async function withAuthUser(fn) {

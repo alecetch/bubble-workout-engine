@@ -1,3 +1,4 @@
+import { dbAvailableOrSkip } from "../helpers/requireDb.js";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
@@ -37,18 +38,8 @@ async function request(instance, path, options = {}) {
 let dbReadyCache = null;
 
 async function dbReady(t) {
-  if (dbReadyCache?.ready) return true;
-  if (dbReadyCache?.reason) {
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
-    dbReadyCache = { ready: false, reason: "Postgres credentials are not configured for HYROX email audit tests." };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
-  try {
-    await pool.query("SELECT 1");
+  if (!await dbAvailableOrSkip(t, pool)) return false;
+
     const tables = await pool.query(`
       SELECT to_regclass('public.hyrox_submissions') AS submissions,
              to_regclass('public.hyrox_analyses') AS analyses
@@ -56,16 +47,13 @@ async function dbReady(t) {
     const row = tables.rows[0] ?? {};
     if (!row.submissions || !row.analyses) {
       dbReadyCache = { ready: false, reason: "HYROX V100-V101 migrations are not applied in this database." };
+      if (process.env.REQUIRE_DB === "true") throw new Error(dbReadyCache.reason);
       t.skip(dbReadyCache.reason);
       return false;
     }
     dbReadyCache = { ready: true };
     return true;
-  } catch (err) {
-    dbReadyCache = { ready: false, reason: `Postgres unavailable for HYROX email audit test: ${err?.code || err?.message}` };
-    t.skip(dbReadyCache.reason);
-    return false;
-  }
+
 }
 
 async function withTransaction(t, fn) {
