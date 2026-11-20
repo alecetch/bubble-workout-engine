@@ -1,3 +1,6 @@
+import rateLimit from "express-rate-limit";
+import { PgRateLimitStore } from "../middleware/pgRateLimitStore.js";
+import { verifyRestoreToken } from "./restoreToken.js";
 import { pool } from "../db.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,52 +64,59 @@ export function draftFromSubmissionRow(row = {}) {
         additionalContext: athleteContext.additionalContext,
       },
       performanceContext,
-      marketingConsent: row.marketing_consent === true,
     },
   };
 }
 
 export function createHyroxSubmissionDraftHandler(db = pool) {
   return async function hyroxSubmissionDraft(req, res) {
+    res.set("Cache-Control", "no-store");
+    res.vary("X-Restore-Token");
     const submissionId = String(req.params.submissionId ?? "").trim();
     if (!UUID_RE.test(submissionId)) {
       return res.status(400).json({ error: "invalid_submission_id" });
     }
 
     try {
+      const full = verifyRestoreToken(req.headers?.["x-restore-token"], submissionId);
+      const personalColumns = full
+        ? `s.email, s.display_name, s.sex, s.age_on_race_day, s.age_group,
+           s.athlete_context_json, s.performance_context_json, a.analysis_json,`
+        : "";
       const result = await db.query(
-        `SELECT
-           s.id AS submission_id,
-           s.email,
-           s.display_name,
-           s.sex,
-           s.age_on_race_day,
-           s.age_group,
-           s.division,
-           s.finish_time_seconds,
-           s.race_name,
-           s.race_date,
-           s.event_country,
-           s.splits_json,
-           s.penalties_json,
-           s.race_replay_json,
-           s.athlete_context_json,
-           s.performance_context_json,
-           s.marketing_consent,
-           s.calculator_mode,
-           a.analysis_json
+        `SELECT ${personalColumns}
+           s.id AS submission_id, s.division, s.finish_time_seconds, s.race_name, s.race_date,
+           s.event_country, s.splits_json, s.penalties_json, s.race_replay_json, s.calculator_mode
          FROM hyrox_submissions s
-         LEFT JOIN hyrox_analyses a ON a.submission_id = s.id
-         WHERE s.id = $1
-         LIMIT 1`,
+         ${full ? "LEFT JOIN hyrox_analyses a ON a.submission_id = s.id" : ""}
+         WHERE s.id = $1 LIMIT 1`,
         [submissionId],
       );
       const row = result.rows[0];
       if (!row) return res.status(404).json({ error: "not_found" });
-      return res.status(200).json(draftFromSubmissionRow(row));
+      const restored = draftFromSubmissionRow(row);
+      if (!full) {
+        delete restored.draft.athlete;
+        delete restored.draft.athleteContext;
+        delete restored.draft.performanceContext;
+        restored.draft.roxzoneTimeSeconds ??= 0;
+        restored.analysisSummary = null;
+      }
+      return res.status(200).json({ ...restored, restoredScope: full ? "full" : "race_only" });
     } catch (err) {
       req.log?.error?.({ event: "hyrox.submission_draft_failed", err: err?.message }, "HYROX submission draft restore failed");
       return res.status(500).json({ error: "restore_failed" });
     }
   };
+}
+
+export function createHyroxSubmissionDraftLimiter({ storeFactory = options => new PgRateLimitStore(options) } = {}) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    store: storeFactory({ prefix: "hyrox:draft:ip:", failMode: "open" }),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "too_many_requests" },
+  });
 }

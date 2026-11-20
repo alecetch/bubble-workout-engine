@@ -141,8 +141,9 @@ export async function fetchHyroxResultsImport(
   }
 }
 
-export async function fetchHyroxSubmissionDraft(submissionId: string): Promise<HyroxSubmissionDraftResponse> {
-  const res = await fetch(`${BASE_URL}/api/hyrox/submission-draft/${encodeURIComponent(submissionId)}`);
+export async function fetchHyroxSubmissionDraft(submissionId: string, restoreToken?: string): Promise<HyroxSubmissionDraftResponse> {
+  const url = `${BASE_URL}/api/hyrox/submission-draft/${encodeURIComponent(submissionId)}`;
+  const res = await (restoreToken ? fetch(url, { headers: { "X-Restore-Token": restoreToken } }) : fetch(url));
   if (!res.ok) {
     throw new ServerError("Unable to restore this HYROX result.");
   }
@@ -157,7 +158,7 @@ export function trackEvent(name: string, props?: Record<string, unknown>): void 
     void fetch(`https://plausible.io/api/event`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, url: window.location.href, domain: key, props }),
+      body: JSON.stringify({ name, url: window.location.href.split("#")[0], domain: key, props }),
     });
   } catch {
     // ignore analytics failures

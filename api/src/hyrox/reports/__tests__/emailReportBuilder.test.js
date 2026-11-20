@@ -5488,3 +5488,15 @@ describe("feature-144: gapPill directional badge and route guard", () => {
   });
 });
 
+
+describe("restore token email links", () => {
+  for (const token of ["v1.1800000000.signature", null]) it(`uses a fragment only when a restore token exists: ${Boolean(token)}`, () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const email = buildEmailReport(mockReport(), mockAnalysis({ submissionId: id }), mockContext(), null, "analyse", null, id, token);
+    const href = email.htmlBody.match(/href="([^"]*race-details[^"]*)"/)[1].replaceAll("&amp;", "&");
+    const url = new URL(href);
+    assert.equal(url.searchParams.get("submissionId"), id);
+    assert.equal(url.searchParams.has("token"), false); assert.equal(url.searchParams.has("rt"), false);
+    assert.equal(url.hash, token ? `#rt=${encodeURIComponent(token)}` : "");
+  });
+});

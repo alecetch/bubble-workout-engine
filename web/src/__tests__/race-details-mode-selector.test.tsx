@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom";
 import { RaceDetailsPage } from "../pages/RaceDetailsPage";
 import { clearDraft, loadDraft, saveDraft } from "../utils/storage";
-import { fetchHyroxResultsImport, fetchHyroxSubmissionDraft, trackEvent } from "../utils/api";
+import { fetchHyroxResultsImport, fetchHyroxSubmissionDraft, trackEvent, trackServerEvent } from "../utils/api";
 
 vi.mock("../utils/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/api")>();
@@ -12,6 +12,7 @@ vi.mock("../utils/api", async (importOriginal) => {
     fetchHyroxResultsImport: vi.fn(),
     fetchHyroxSubmissionDraft: vi.fn(),
     trackEvent: vi.fn(),
+    trackServerEvent: vi.fn(),
   };
 });
 
@@ -344,5 +345,43 @@ describe("RaceDetailsPage progressive disclosure", () => {
 
     expect(loadDraft()?.meta?.source).toBeUndefined();
     expect(trackEvent).not.toHaveBeenCalledWith("analysis_email_target_clicked", expect.anything());
+  });
+
+  test("restore token stays in memory and is removed before analytics or storage", async () => {
+    const path = "/hyrox-calculator/race-details?mode=target&source=email&submissionId=11111111-1111-4111-8111-111111111111";
+    window.history.replaceState(null, "", `${path}#rt=abc`);
+    const history = vi.spyOn(window.history, "replaceState");
+    const storage = vi.spyOn(Storage.prototype, "setItem");
+    vi.mocked(fetchHyroxSubmissionDraft).mockResolvedValue({ submissionId: "11111111-1111-4111-8111-111111111111",
+      restoredScope: "full", analysisSummary: null, draft: { calculatorMode: "analyse", athlete: { name: "Full Athlete", email: "full@example.test", gender: "female", ageGroup: "30-34" }, race: { division: "open", finishTimeSeconds: 5400 }, splits: [] } });
+    renderPage(path);
+    await waitFor(() => expect(screen.getByLabelText(/athlete name/i)).toHaveValue("Full Athlete"));
+    expect(fetchHyroxSubmissionDraft).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "abc");
+    expect(history).toHaveBeenCalledWith(null, "", path);
+    expect(window.location.hash).toBe("");
+    expect(JSON.stringify(storage.mock.calls)).not.toContain("abc");
+    expect(JSON.stringify(vi.mocked(trackEvent).mock.calls)).not.toContain("abc");
+    expect(JSON.stringify(vi.mocked(trackServerEvent).mock.calls)).not.toContain("abc");
+    expect(loadDraft()?.athlete?.email).toBe("full@example.test");
+    fireEvent.change(screen.getByLabelText(/target finish time/i), { target: { value: "1:20:00" } });
+    fireEvent.click(screen.getAllByRole("button", { name: /next: check splits/i })[0]);
+    expect(loadDraft()?.athlete?.email).toBe("full@example.test");
+    expect(JSON.stringify(storage.mock.calls)).not.toContain("abc");
+    storage.mockRestore(); history.mockRestore(); window.history.replaceState(null, "", "/");
+  });
+
+  test("race-only restore clears stale athlete details, context and consent", async () => {
+    saveDraft({ athlete: { name: "Stale Athlete", email: "stale@example.test", gender: "female", ageGroup: "40-44" },
+      athleteContext: { additionalContext: "private old context", targetFinishTimeSeconds: 5000 }, marketingConsent: true });
+    vi.mocked(fetchHyroxSubmissionDraft).mockResolvedValue({ submissionId: "11111111-1111-4111-8111-111111111111",
+      restoredScope: "race_only", analysisSummary: null, draft: { calculatorMode: "analyse", race: { raceName: "HYROX London", division: "open", finishTimeSeconds: 5400 }, splits: [] } });
+    renderPage("/hyrox-calculator/race-details?submissionId=11111111-1111-4111-8111-111111111111");
+    await waitFor(() => expect(screen.getByText("We've restored your race. Please re-enter your details.")).toBeInTheDocument());
+    expect(screen.getByLabelText(/athlete name/i)).toHaveValue("");
+    expect(screen.getByLabelText(/age group/i)).toHaveValue("");
+    expect(screen.getByLabelText(/^finish time/i)).toHaveValue("1:30:00");
+    expect(loadDraft()?.athlete).toBeUndefined(); expect(loadDraft()?.athleteContext).toBeUndefined();
+    expect(loadDraft()?.marketingConsent).toBe(false);
+    for (const label of ["Male", "Female"]) expect(screen.getByRole("button", { name: label }).className).not.toMatch(/selected/);
   });
 });

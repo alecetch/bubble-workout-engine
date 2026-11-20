@@ -73,6 +73,7 @@ export function ReviewPage() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [email, setEmail] = useState(draft?.athlete?.email ?? "");
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [appLinkConsent, setAppLinkConsent] = useState(draft?.appLinkConsent ?? false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
@@ -89,7 +90,7 @@ export function ReviewPage() {
     );
   }
 
-  const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, marketingConsent = false, calculatorMode = "target" } = draft;
+  const { athlete, race, splits = [], penalties = [], raceReplay = [], athleteContext, calculatorMode = "target" } = draft;
   const isTargetBranch = isRestoredTargetBranch(variant) || variant === "target-direct";
   const contextPath = isTargetBranch ? "/hyrox-calculator/target-benchmarks" : "/hyrox-calculator/context";
   const steps =
@@ -283,6 +284,10 @@ export function ReviewPage() {
               </PrimaryButton>
               <p className={styles.timingNote}>Takes around 10 seconds.</p>
 
+              <label className={`${styles.checkRow} ${styles.checkbox}`}>
+                <input type="checkbox" checked={marketingConsent} onChange={(event) => setMarketingConsent(event.target.checked)} />
+                <span>Send me HYROX training updates and other emails from {BRAND.name}.</span>
+              </label>
               <label className={`${styles.checkRow} ${styles.checkbox}`}>
                 <input type="checkbox" checked={appLinkConsent} onChange={(event) => setAppLinkConsent(event.target.checked)} />
                 <span>Link this result to my {BRAND.name} account if I create one, so my training can use it.</span>

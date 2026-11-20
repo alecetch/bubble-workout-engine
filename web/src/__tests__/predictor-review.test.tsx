@@ -176,4 +176,11 @@ describe("PredictorReviewPage", () => {
 
     expect(await screen.findByText(/Email is required/i)).toBeInTheDocument();
   });
+
+  test("does not pre-tick marketing consent from a stale full draft", () => {
+    savePredictorDraft({ marketingConsent: true, athlete: { name: "Full Athlete", email: "full@example.test", sex: "female", ageGroup: "30-34", division: "open" } });
+    renderPage();
+    expect(screen.getByRole("checkbox", { name: /send me hyrox training updates/i })).not.toBeChecked();
+    expect(screen.getByLabelText(/email address/i)).toHaveValue("full@example.test");
+  });
 });

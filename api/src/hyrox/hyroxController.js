@@ -1,3 +1,4 @@
+import { mintRestoreToken } from "./restoreToken.js";
 import { pool } from "../db.js";
 import { analyseSubmission } from "./engine/hyroxAnalysisEngine.js";
 import { normaliseSubmission } from "./engine/segmentNormaliser.js";
@@ -266,8 +267,9 @@ export async function analyse(req, res) {
       );
     });
 
+    const restoreToken = mintRestoreToken(submission.id);
     const insights = unsupportedDivision ? [] : generateInsights(analysisJson, input.athleteContext);
-    const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report", calculatorMode: body.calculatorMode ?? "target", submissionId: submission.id });
+    const emailReport = assembleReport({ raceResult: input.race, analysisJson, insights, athleteContext: input.athleteContext, outputType: "email_report", calculatorMode: body.calculatorMode ?? "target", submissionId: submission.id, restoreToken });
     const webReport = assembleReport({
       raceResult: input.race,
       analysisJson,
@@ -288,6 +290,7 @@ export async function analyse(req, res) {
     const status = unsupportedDivision ? "limited" : statusFromAnalysis(analysisJson, normalised);
     return res.status(200).json({
       submissionId: submission.id,
+      restoreToken,
       status,
       reason: unsupportedDivision ? "doubles_relay_not_supported_v1" : undefined,
       analysisScope: analysisJson.analysisScope,

@@ -170,6 +170,7 @@ export interface HyroxBenchmarkContext {
 }
 
 export interface HyroxAnalysisResponse {
+  restoreToken?: string | null;
   submissionId: string;
   status: string;
   analysisScope: string;
@@ -183,7 +184,10 @@ export interface HyroxAnalysisResponse {
 
 export interface HyroxSubmissionDraftResponse {
   submissionId: string;
-  draft: HyroxCalculatorDraft;
+  restoredScope?: "full" | "race_only";
+  draft: Omit<HyroxCalculatorDraft, "athlete" | "marketingConsent" | "appLinkConsent">
+    & Partial<Pick<HyroxCalculatorDraft, "athlete" | "marketingConsent" | "appLinkConsent">>
+    & { performanceContext?: Record<string, unknown> };
   analysisSummary: {
     limiterLabel: string | null;
     limiterSegmentKey: string | null;

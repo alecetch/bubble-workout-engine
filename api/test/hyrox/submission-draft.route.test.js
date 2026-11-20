@@ -1,6 +1,10 @@
+import { mintRestoreToken, _resetForTest } from "../../src/hyrox/restoreToken.js";
 import assert from "node:assert/strict";
 import express from "express";
-import test from "node:test";
+import test, { after } from "node:test";
+const originalSecret = process.env.JWT_SECRET;
+process.env.JWT_SECRET = "draft-existing-tests"; _resetForTest();
+after(() => { if (originalSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = originalSecret; _resetForTest(); });
 import { createHyroxSubmissionDraftHandler, draftFromSubmissionRow } from "../../src/hyrox/hyroxSubmissionDraftController.js";
 
 const SUBMISSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -20,7 +24,7 @@ async function request(app, path) {
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   try {
-    const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`);
+    const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, { headers: { "X-Restore-Token": mintRestoreToken(SUBMISSION_ID) } });
     const body = await response.json();
     return { response, body };
   } finally {
