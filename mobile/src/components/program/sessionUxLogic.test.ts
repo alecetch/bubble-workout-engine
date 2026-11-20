@@ -1,4 +1,4 @@
-import { buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, computeTotalPrescribedSets, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
+import { weightLooksUnusual, buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, computeTotalPrescribedSets, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
 test("guidelinePrefill prefers progression load over guideline load when both are present", () => {
     expect(guidelinePrefill({
         guidelineLoad: { value: 80 },
@@ -242,3 +242,9 @@ test("bodyweight rows count as completed sets with zero volume", () => {
     { programExerciseId: "push-up", orderIndex: 1, weightKg: null, repsCompleted: 10, rirActual: null },
   ] })).toEqual({ totalVolumeKg: 0, totalSets: 1, exerciseCount: 1 });
 });
+
+for (const [entered,reference,expected] of [
+  [150,100,null],[150.01,100,"heavier"],[50,100,null],[49.99,100,"lighter"],
+  [400,null,null],[400.01,null,"too_high"],[200,undefined,null],[401,100,"too_high"],
+  [20,0,null],[0,100,"lighter"],[NaN,100,null],
+] as const) test(`weight plausibility ${entered} against ${reference}`,()=>expect(weightLooksUnusual(entered,reference)).toBe(expected));

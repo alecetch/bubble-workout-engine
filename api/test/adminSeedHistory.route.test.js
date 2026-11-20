@@ -65,7 +65,9 @@ test("buildRobustEmitterRows creates requested 12-week program with anchor cover
   const exRows = rows.filter((row) => row.startsWith("EX|"));
 
   assert.equal(weekRows.length, 12);
+  // Sessions, not the exercise sets emitted within them, are progression exposures.
   assert.equal(dayRows.length, 36);
+  assert.equal(new Set(dayRows.map(row => row.split("|")[13])).size, 36);
   assert.ok(exRows.some((row) => row.includes("|bb_back_squat|")));
   assert.ok(exRows.some((row) => row.includes("|bb_bench_press|")));
   assert.ok(exRows.some((row) => row.includes("|bb_bentover_row|")));

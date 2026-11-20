@@ -3,6 +3,99 @@ import {
   fetchProgramGenerationConfigs,
 } from "./programGenerationConfig.js";
 
+export const DEFAULT_SAFETY = {
+  max_jump_pct: 10, max_jump_increments: 2, max_weight_kg: 400, max_reps: 100,
+  outlier_high_ratio: 1.5, outlier_low_ratio: 0.5, confirm_tolerance_pct: 15,
+  layoff_hold_days: 15, layoff_reduce_days: 29, layoff_major_days: 57,
+  layoff_reduce_factor: 0.90, layoff_major_factor: 0.80,
+  evidence_gap_days: 28, override_max_age_days: 180,
+};
+const UNCONFIRMED_REASON = "Your last weight looked very different from before. We've kept your previous weight until it's confirmed.";
+const CAP_REASON = "Capped to a safe step from your last confirmed weight.";
+function roundDown(value, increment) {
+  const step = increment > 0 ? increment : 2.5;
+  return Number((Math.floor((value + 1e-9) / step) * step).toFixed(2));
+}
+export function applyJumpCap(loadKg, trustedLoadKg, increment, safety = {}) {
+  const rules = { ...DEFAULT_SAFETY, ...safety };
+  if (!(trustedLoadKg > 0) || loadKg == null) return { loadKg, capped: false };
+  const limit = roundDown(trustedLoadKg + Math.max(increment,
+    Math.min(trustedLoadKg * rules.max_jump_pct / 100, rules.max_jump_increments * increment)), increment);
+  return { loadKg: Math.min(loadKg, limit), capped: loadKg > limit };
+}
+export function resolveLayoffAdjustment({ daysSinceLastTraining, trustedLoadKg, recommendedLoadKg, increment, safety = {} }) {
+  const rules = { ...DEFAULT_SAFETY, ...safety };
+  if (recommendedLoadKg == null || !(trustedLoadKg > 0) || daysSinceLastTraining == null || daysSinceLastTraining < rules.layoff_hold_days)
+    return { loadKg: recommendedLoadKg, band: "none", reason: null };
+  const band = daysSinceLastTraining >= rules.layoff_major_days ? "major"
+    : daysSinceLastTraining >= rules.layoff_reduce_days ? "reduce" : "hold";
+  const load = band === "hold" ? Math.min(recommendedLoadKg ?? trustedLoadKg, trustedLoadKg)
+    : trustedLoadKg * (band === "major" ? rules.layoff_major_factor : rules.layoff_reduce_factor);
+  const weeks = Math.max(1, Math.floor(daysSinceLastTraining / 7));
+  return { loadKg: roundDown(load, increment), band,
+    reason: `Welcome back. We've eased your weight after ${weeks} ${weeks === 1 ? "week" : "weeks"} off.` };
+}
+export async function getDaysSinceLastTraining(db, userId, now = new Date()) {
+  const result = await db.query(`SELECT max(sel.created_at) AS last_trained_at
+    FROM segment_exercise_log sel WHERE sel.user_id = $1 AND sel.is_draft = FALSE`, [userId]);
+  const last = result.rows[0]?.last_trained_at;
+  return last == null ? null : Math.max(0, Math.floor((new Date(now) - new Date(last)) / 86400000));
+}
+export function buildExposures(rows, safety = {}) {
+  const rules = { ...DEFAULT_SAFETY, ...safety };
+  const groups = new Map();
+  let ignoredTotal = 0;
+  let newestIgnoredAt = -Infinity;
+  for (const row of rows) {
+    const key = row.program_day_id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const exposures = [];
+  for (const [programDayId, original] of groups) {
+    const sets = original.filter(row => !(Number(row.weight_kg) > rules.max_weight_kg || Number(row.reps_completed) > rules.max_reps));
+    const ignoredSetCount = original.length - sets.length;
+    ignoredTotal += ignoredSetCount;
+    if (!sets.length) { newestIgnoredAt = Math.max(newestIgnoredAt, ...original.map(row => new Date(row.created_at).getTime())); continue; }
+    sets.sort((a,b) => Number(a.order_index ?? 0) - Number(b.order_index ?? 0)
+      || new Date(a.created_at) - new Date(b.created_at) || String(a.log_id).localeCompare(String(b.log_id)));
+    const loads = new Map();
+    for (const set of sets) if (Number(set.weight_kg) > 0) loads.set(Number(set.weight_kg), (loads.get(Number(set.weight_kg)) ?? 0) + 1);
+    const repeated = [...loads].filter(([, count]) => count >= 2).map(([load]) => load);
+    const workingLoadKg = sets.length === 1 ? toNumber(sets[0].weight_kg) : repeated.length ? Math.max(...repeated) : null;
+    const workingSets = workingLoadKg == null ? sets : sets.filter(set => Number(set.weight_kg) === workingLoadKg);
+    const limitingSet = [...workingSets].sort((a,b) => (toNumber(a.reps_completed, Infinity) - toNumber(b.reps_completed, Infinity))
+      || (toNumber(a.rir_actual, Infinity) - toNumber(b.rir_actual, Infinity)) || Number(b.order_index ?? 0) - Number(a.order_index ?? 0))[0];
+    const trainedAt = new Date(Math.max(...original.map(row => new Date(row.created_at).getTime())));
+    exposures.push({ programDayId, trainedAt, sets, workingLoadKg, workingSets, limitingSet, ignoredSetCount });
+  }
+  exposures.sort((a,b) => b.trainedAt - a.trainedAt || String(b.programDayId).localeCompare(String(a.programDayId)));
+  // Preserve bounds counts even when an entire session was discarded.
+  Object.defineProperty(exposures, "ignoredSetCount", { value: ignoredTotal });
+  Object.defineProperty(exposures, "newestSessionIgnored", { value: newestIgnoredAt >= (exposures[0]?.trainedAt?.getTime() ?? Infinity) });
+  return exposures;
+}
+export function markTrust(exposures, safety = {}) {
+  const rules = { ...DEFAULT_SAFETY, ...safety };
+  const result = exposures.map(exposure => ({ ...exposure }));
+  Object.defineProperty(result, "ignoredSetCount", { value: exposures.ignoredSetCount });
+  Object.defineProperty(result, "newestSessionIgnored", { value: exposures.newestSessionIgnored });
+  let trusted = null, pending = null;
+  for (const exposure of [...result].reverse()) {
+    const load = exposure.workingLoadKg;
+    exposure.trusted = false;
+    if (!(load > 0)) { pending = null; continue; }
+    if (pending && Math.abs(load / pending.workingLoadKg - 1) <= rules.confirm_tolerance_pct / 100) {
+      pending.trusted = true;
+      trusted = pending.workingLoadKg;
+    }
+    exposure.trusted = trusted == null || (load <= trusted * rules.outlier_high_ratio && load >= trusted * rules.outlier_low_ratio);
+    if (exposure.trusted) { trusted = load; pending = null; }
+    else pending = exposure;
+  }
+  return result;
+}
+
 function toNumber(value, fallback = null) {
   if (value == null) return fallback;
   if (typeof value === "string" && value.trim() === "") return fallback;
@@ -61,6 +154,7 @@ function parseTargetRir(value, fallback = 2) {
 function makeDefaultProgressionConfig(programType) {
   const type = String(programType ?? "").trim().toLowerCase();
   return {
+    safety: { ...DEFAULT_SAFETY },
     history: {
       lookback_exposures_exact: 3,
       minimum_exact_exposures_for_full_confidence: 2,
@@ -169,6 +263,7 @@ function mergeProgressionConfig(defaults, pgcJson) {
   return {
     ...defaults,
     ...progression,
+    safety: { ...defaults.safety, ...(progression.safety ?? {}) },
     history: { ...defaults.history, ...(progression.history ?? {}) },
     outcomes: { ...defaults.outcomes, ...(progression.outcomes ?? {}) },
     slot_profile_map: mergeNamedObjectEntries(defaults.slot_profile_map, progression.slot_profile_map),
@@ -217,10 +312,6 @@ function confidenceLabel(score) {
   return "low";
 }
 
-function mostRecentPositiveLoad(history) {
-  return history.find((entry) => toNumber(entry.weight_kg, 0) > 0) ?? null;
-}
-
 function roundToIncrement(value, increment) {
   if (!(value > 0)) return null;
   const step = increment > 0 ? increment : 2.5;
@@ -233,7 +324,9 @@ function buildDecision({
   profileName,
   profile,
   rankOverride,
+  exposures,
   history,
+  daysSinceLastTraining = null,
   config,
 }) {
   if (!["hypertrophy", "strength"].includes(String(programType ?? "").toLowerCase())) {
@@ -241,34 +334,42 @@ function buildDecision({
   }
 
   if (!row.is_loadable) return null;
-  if (!history.length) return null;
+  exposures ??= markTrust(buildExposures(history ?? [], config.safety), config.safety);
+  if (!exposures.length) return null;
 
   const repRange = parseRepRange(row.reps_prescribed);
   const targetHigh = repRange.high ?? repRange.low;
   const targetLow = repRange.low ?? repRange.high;
   const targetRir = parseTargetRir(row.intensity_prescription, 2);
-  const recent = history.slice(0, Math.max(2, toInt(config.history?.lookback_exposures_exact, 3) ?? 3));
-  const latest = recent[0];
-  const second = recent[1] ?? null;
-  const latestWeight = toNumber(latest?.weight_kg, null);
-  const latestReps = toInt(latest?.reps_completed, null);
-  const latestRir = toNumber(latest?.rir_actual, null);
-  const baselineLoadRow = mostRecentPositiveLoad(recent);
-  const baselineLoad = toNumber(baselineLoadRow?.weight_kg, latestWeight);
+  const recent = [];
+  let previous = null;
+  for (const exposure of exposures) {
+    if (previous && (previous.trainedAt - exposure.trainedAt) / 86400000 > config.safety.evidence_gap_days) break;
+    previous = exposure;
+    if (exposure.trusted && recent.length < Math.max(1, toInt(config.history?.lookback_exposures_exact, 3))) recent.push(exposure);
+  }
+  const latest = recent[0] ?? exposures.find(exposure => exposure.trusted);
+  if (!latest) return null;
+  const latestWeight = latest.workingLoadKg;
+  const latestReps = toInt(latest.limitingSet?.reps_completed, null);
+  const latestRir = toNumber(latest.limitingSet?.rir_actual, null);
+  const baselineLoad = latest.workingLoadKg;
+  if (!(baselineLoad > 0)) return null;
   const progressGateOffset = toNumber(rankOverride?.rir_progress_gate_offset, 0) ?? 0;
   const requiredRir = targetRir + progressGateOffset;
   const evidenceMultiplier = toNumber(rankOverride?.evidence_requirement_multiplier, 1) ?? 1;
   const requiredSuccesses = Math.max(1, Math.ceil(evidenceMultiplier));
-  const successfulExposures = recent.filter((entry) => {
+  const successfulExposures = recent.filter((session) => session.workingSets.every((entry) => {
     const reps = toInt(entry.reps_completed, null);
     const rir = toNumber(entry.rir_actual, null);
     if (reps == null || targetHigh == null) return false;
     if (reps < targetHigh) return false;
     if (rir == null) return reps >= targetHigh;
     return rir >= requiredRir;
-  }).length;
+  })).length;
 
-  const underperformances = recent.filter((entry) => {
+  const underperformances = recent.filter((session) => {
+    const entry = session.limitingSet;
     const reps = toInt(entry.reps_completed, null);
     const rir = toNumber(entry.rir_actual, null);
     if (reps != null && targetLow != null && reps < targetLow) return true;
@@ -280,7 +381,7 @@ function buildDecision({
   let primaryLever = "hold";
   let recommendedLoadKg = null;
   let recommendedRepsTarget = null;
-  let confidenceScore = 25 + Math.min(history.length, 3) * 15;
+  let confidenceScore = 25 + Math.min(recent.length, 3) * 15;
 
   if (latestRir != null) confidenceScore += 10;
   if (successfulExposures >= requiredSuccesses) confidenceScore += 15;
@@ -289,7 +390,11 @@ function buildDecision({
   const deloadThreshold = toInt(deloadProfile.underperformance_exposure_threshold, 2) ?? 2;
   const loadDropPct = toNumber(deloadProfile.response?.load_drop_pct, 5) ?? 5;
 
-  if (underperformances >= deloadThreshold && baselineLoad) {
+  const unconfirmedSession = Boolean(exposures.newestSessionIgnored || (exposures[0].workingLoadKg != null && !exposures[0].trusted));
+  if (unconfirmedSession) {
+    recommendedLoadKg = baselineLoad;
+    reasons.push(UNCONFIRMED_REASON);
+  } else if (underperformances >= deloadThreshold && baselineLoad) {
     outcome = "deload_local";
     primaryLever = "load";
     recommendedLoadKg = roundToIncrement(baselineLoad * (1 - (loadDropPct / 100)), resolveLoadIncrement(profileName, config, row, baselineLoad, rankOverride));
@@ -328,7 +433,22 @@ function buildDecision({
     }
   }
 
+  const increment = resolveLoadIncrement(profileName, config, row, baselineLoad, rankOverride);
+  let capApplied = false;
+  if (outcome === "increase_load") {
+    const capped = applyJumpCap(recommendedLoadKg, baselineLoad, increment, config.safety);
+    recommendedLoadKg = capped.loadKg;
+    capApplied = capped.capped;
+    if (capApplied) reasons.push(CAP_REASON);
+  }
+  if (outcome === "deload_local") recommendedLoadKg = Math.max(recommendedLoadKg, baselineLoad * 0.5);
   const evidence = {
+    sessions_considered: recent.length,
+    ignored_set_count: exposures.ignoredSetCount ?? exposures.reduce((sum, e) => sum + e.ignoredSetCount, 0),
+    unconfirmed_session: unconfirmedSession,
+    cap_applied: capApplied,
+    days_since_last_training: daysSinceLastTraining,
+    trusted_load_kg: baselineLoad,
     exposures_considered: recent.length,
     successful_exposures: successfulExposures,
     underperformance_exposures: underperformances,
@@ -356,7 +476,7 @@ function buildDecision({
     recommended_rest_seconds: null,
     reasons,
     evidence,
-    source_log_id: latest?.log_id ?? null,
+    source_log_id: latest?.limitingSet?.log_id ?? null,
   };
 }
 
@@ -378,12 +498,14 @@ export function makeProgressionDecisionService(db) {
     programType,
     fitnessRank = 1,
     completedProgramDayId = null,
+    now = new Date(),
   }) {
     if (!programId || !userId || !programType) {
       return { decisions: [], updated: 0 };
     }
 
     const { config, rankOverrides } = await loadProgressionConfig(db, programType);
+    const daysSinceLastTraining = await getDaysSinceLastTraining(db, userId, now);
     const rankOverride = rankOverrides?.[rankKey(fitnessRank)] ?? {};
 
     const programExerciseResult = await db.query(
@@ -435,12 +557,12 @@ export function makeProgressionDecisionService(db) {
       `
       SELECT
         sel.id AS log_id,
+        sel.program_day_id, sel.order_index, sel.created_at,
         pe.exercise_id,
         pe.purpose,
         sel.weight_kg,
         sel.reps_completed,
-        sel.rir_actual,
-        COALESCE(pd.scheduled_date::text, sel.created_at::date::text) AS exposure_date
+        sel.rir_actual
       FROM segment_exercise_log sel
       JOIN program_exercise pe
         ON pe.id = sel.program_exercise_id
@@ -450,7 +572,8 @@ export function makeProgressionDecisionService(db) {
         AND sel.is_draft = FALSE
         AND pd.is_completed = TRUE
         AND pe.exercise_id = ANY($2::text[])
-      ORDER BY exposure_date DESC, sel.created_at DESC
+      ORDER BY max(sel.created_at) OVER (PARTITION BY sel.program_day_id) DESC,
+        sel.program_day_id, sel.order_index ASC, sel.created_at ASC
       `,
       [userId, exerciseIds],
     );
@@ -482,7 +605,8 @@ export function makeProgressionDecisionService(db) {
         profileName,
         profile,
         rankOverride,
-        history: historyByExercisePurpose.get(key) ?? [],
+        exposures: markTrust(buildExposures(historyByExercisePurpose.get(key) ?? [], config.safety), config.safety),
+        daysSinceLastTraining,
         config,
       });
       if (decision) {
@@ -610,9 +734,7 @@ export function makeProgressionDecisionService(db) {
       const regularIds = decision.target_program_exercise_ids.filter(id => !deloadIds.includes(id));
       if (regularIds.length) rowDecisions.push({ ...decision, target_program_exercise_ids: regularIds });
       if (deloadIds.length) {
-        const recent = (historyByExercisePurpose.get(`${decision.exercise_id}::${decision.purpose}`) ?? [])
-          .slice(0, decision.evidence.exposures_considered);
-        const baselineLoad = toNumber(mostRecentPositiveLoad(recent)?.weight_kg, decision.evidence.latest_weight_kg);
+        const baselineLoad = decision.evidence.trusted_load_kg;
         rowDecisions.push({ ...decision, target_program_exercise_ids: deloadIds,
           outcome: "hold", recommended_load_kg: baselineLoad, recommended_reps_target: null,
           reasons: [...decision.reasons, "Deload week: keep load steady."],
@@ -689,8 +811,8 @@ export function makeProgressionDecisionService(db) {
           decision.outcome,
           decision.primary_lever,
           decision.confidence,
-          decision.recommended_load_kg != null && decision.evidence.latest_weight_kg != null
-            ? Number(decision.recommended_load_kg) - Number(decision.evidence.latest_weight_kg)
+          decision.recommended_load_kg != null && decision.evidence.trusted_load_kg != null
+            ? Number(decision.recommended_load_kg) - Number(decision.evidence.trusted_load_kg)
             : null,
           decision.recommended_reps_target != null
             ? decision.recommended_reps_target - (toInt(decision.evidence.target_high, 0) ?? 0)
@@ -713,6 +835,7 @@ export function makeProgressionDecisionService(db) {
   return {
     applyProgressionRecommendations,
     _test: {
+      buildExposures, markTrust, resolveLayoffAdjustment, applyJumpCap,
       parseRepRange,
       parseTargetRir,
       resolveLoadIncrement,
@@ -723,4 +846,4 @@ export function makeProgressionDecisionService(db) {
   };
 }
 
-export { buildDecision, loadProgressionConfig, rankKey, resolveProfileName };
+export { resolveLoadIncrement, makeDefaultProgressionConfig, mergeProgressionConfig, buildDecision, loadProgressionConfig, rankKey, resolveProfileName };

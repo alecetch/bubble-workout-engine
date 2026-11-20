@@ -124,7 +124,7 @@ test("applies local deload load override during structural deload week", () => {
   const week4Item = result.program.weeks[1].days[0].segments[0].items[0];
   assert.equal(week1Item.prescribed_load_kg, 95);
   assert.equal(week4Item.prescribed_load_kg, 95);
-  assert.deepEqual(week4Item._progression_override_debug, { applied: "deload_local_structural_week", outcome: "deload_local" });
+  assert.deepEqual(week4Item._progression_override_debug, { layoff_band: "none", cap_applied: false, applied: "deload_local_structural_week", outcome: "deload_local" });
   assert.equal(result.debug.overrides_applied, 2);
 });
 
@@ -139,4 +139,23 @@ test("ignores missing progression state cleanly", () => {
   const item = result.program.weeks[0].days[0].segments[0].items[0];
   assert.equal(item.prescribed_load_kg, undefined);
   assert.equal(result.debug.overrides_applied, 0);
+});
+
+for (const [label, age, days, load, expected, skipped] of [
+  ["stale load only", 181, 0, 110, undefined, "stale_override"],
+  ["exact age boundary", 180, 0, 110, 110, undefined],
+  ["layoff", 10, 35, 110, 90, undefined],
+  ["cap", 10, 0, 200, 110, undefined],
+]) test(`load safety ${label} leaves other overrides unchanged`, () => {
+  const now = new Date("2026-11-20T12:00:00Z");
+  const result = applyExerciseProgressionOverrides({ program: makeProgram(), now, daysSinceLastTraining: days,
+    progressionStateMap: new Map([["ex-1::main", {
+      current_load_kg_override: load, last_decided_at: new Date(now - age * 86400000),
+      last_decision_context_json: { evidence: { trusted_load_kg: 100 } },
+      current_rep_target_override: 8, current_set_override: 5, current_rest_sec_override: 150,
+    }]]) });
+  const item = result.program.weeks[0].days[0].segments[0].items[0];
+  assert.equal(item.prescribed_load_kg, expected);
+  assert.equal(item.reps_prescribed, "8"); assert.equal(item.sets, 5); assert.equal(item.rest_after_set_sec, 150);
+  assert.equal(item._progression_override_debug.skipped, skipped);
 });

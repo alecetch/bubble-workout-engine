@@ -28,6 +28,7 @@ function mockPool(responses) {
     if (sql.includes("UPDATE program_day pd SET") || sql.includes("INSERT INTO training_session") || sql.includes("DELETE FROM training_session")) return { rows: [], rowCount: 1 };
     if (sql.includes("SELECT DISTINCT local_date")) return { rows: [], rowCount: 0 };
 
+    if (sql.includes("max(sel.created_at)") || sql.includes("FROM program_generation_config")) return { rows: [], rowCount: 0 };
     const response = responses[i++];
     if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
     if (response instanceof Error) throw response;

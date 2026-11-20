@@ -1,6 +1,6 @@
 import { isOutboxAvailable } from "../../../sync/setLogOutbox";
 import type { SetSaveStatus } from "../hooks/useSetSaveStatus";
-import React from "react";
+import React, { useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
@@ -30,7 +30,7 @@ type InlineExerciseLogBlockProps = {
     value: string,
     exercise: Exercise,
   ) => void;
-  onSetComplete: (exercise: Exercise, setIndex: number) => void | Promise<void>;
+  onSetComplete: (exercise: Exercise, setIndex: number) => void | boolean | Promise<void | boolean>;
   onAddSet: (exercise: Exercise) => void;
   onRemoveSet: (exercise: Exercise) => void;
   onLogAllSets: (exercise: Exercise) => void | Promise<void>;
@@ -60,6 +60,7 @@ export function InlineExerciseLogBlock({
   onLogAllSets,
   onSelectRir,
 }: InlineExerciseLogBlockProps): React.JSX.Element {
+  const weightInputs = useRef<Array<{ focus(): void } | null>>([]);
   const exerciseKey = exercise.id ?? "";
 
   return (
@@ -85,6 +86,7 @@ export function InlineExerciseLogBlock({
             ) : (
               <View style={styles.weightInputGroup}>
                 <TextInput
+                  ref={node => { weightInputs.current[setIndex] = node; }}
                   editable={!pending}
                   value={setInput.weight}
                   onChangeText={(value) => {
@@ -119,7 +121,7 @@ export function InlineExerciseLogBlock({
               style={styles.checkboxButton}
               accessibilityLabel={`${exercise.name} set ${setIndex + 1} ${status === "failed" ? "not saved. Double-tap to retry." : status === "waiting" ? "waiting for connection" : status === "saving" ? "saving" : "complete"}`}
               disabled={pending}
-              onPress={() => { void onSetComplete(exercise, setIndex); }}
+              onPress={() => { void Promise.resolve(onSetComplete(exercise, setIndex)).then(saved => { if (saved === false) weightInputs.current[setIndex]?.focus(); }); }}
             >
               {pending ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
               {status !== "saving" ? (

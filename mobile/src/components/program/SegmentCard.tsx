@@ -4,7 +4,7 @@ import { useSetLogOutbox } from "../../sync/useSetLogOutboxSync";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import { Alert, type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import type { ViewInstance } from "react-native";
 import { ApiError } from "../../api/client";
 import type { ProgramDayFullResponse } from "../../api/programViewer";
@@ -19,6 +19,7 @@ import { typography } from "../../theme/typography";
 import { PressableScale } from "../interaction/PressableScale";
 import { SkeletonBlock } from "../feedback/SkeletonBlock";
 import {
+  guidelinePrefill, weightLooksUnusual,
   findNextUncheckedSetKey,
   formatRoundSummary,
   getExerciseSetCount,
@@ -170,6 +171,7 @@ export const SegmentCard = React.memo(function SegmentCard({
   const [showAdjustControls, setShowAdjustControls] = useState(false);
   const pendingEmptyRoundRef = useRef(false);
   const unsavedCountRef = useRef(0);
+  const promptedWeights = useRef(new Set<string>());
   // Restored rows count as logged data, but only a new save may announce completion.
   const doneKeysFromRestore = useRef(true);
   const {
@@ -458,6 +460,7 @@ export const SegmentCard = React.memo(function SegmentCard({
 
   async function handleRoundComplete(roundIndex: number): Promise<void> {
     if (completedRoundIndices.has(roundIndex) || loggableExercises.some(ex => saveStatus.isPending(buildSetKey(ex, roundIndex)))) return;
+    for (const exercise of loggableExercises) if (!(await confirmSetWeight(exercise, roundIndex))) return;
     const allEmpty = loggableExercises.every((exercise) => {
       const row = inputMap[exercise.id ?? ""]?.[roundIndex];
       return !row || (row.weight === "" && row.reps === "");
@@ -628,13 +631,31 @@ export const SegmentCard = React.memo(function SegmentCard({
     });
   }
 
-  async function handleSetComplete(exercise: Exercise, setIndex: number): Promise<void> {
+  async function confirmSetWeight(exercise: Exercise, setIndex: number): Promise<boolean> {
+    if (isUnloadedExercise(exercise)) return true;
+    const enteredKg = parseFloat(inputMap[exercise.id ?? ""]?.[setIndex]?.weight ?? "");
+    const reference = parseFloat(guidelinePrefill(exercise)) || parseFloat(inputMap[exercise.id ?? ""]?.[setIndex - 1]?.weight ?? "");
+    const unusual = weightLooksUnusual(enteredKg, reference);
+    const key = `${programDayId}:${buildSetKey(exercise, setIndex)}:${enteredKg}`;
+    if (!unusual) return true;
+    if (promptedWeights.current.has(key)) return true;
+    promptedWeights.current.add(key);
+    return new Promise(resolve => Alert.alert("Check this weight",
+      unusual === "too_high" ? "That's over 400 kg." : `That's much ${unusual} than last time. Save ${enteredKg} kg?`,
+      [
+        { text: "Edit", style: "cancel", onPress: () => { resolve(false); } },
+        { text: "Save", onPress: () => { resolve(true); } },
+      ], { cancelable: false }));
+  }
+
+  async function handleSetComplete(exercise: Exercise, setIndex: number): Promise<void | boolean> {
     const programExerciseId = exercise.id;
     if (!programExerciseId) return;
     const setKey = buildSetKey(exercise, setIndex);
     if (doneSetKeys.has(setKey) || saveStatus.isPending(setKey)) return;
 
     const row = inputMap[programExerciseId]?.[setIndex] ?? { weight: "", reps: "", rirActual: null };
+    if (!(await confirmSetWeight(exercise, setIndex))) return false;
     const exerciseRir = exerciseRirMap[programExerciseId] ?? null;
     setActiveSetKey(setKey);
 
@@ -747,6 +768,7 @@ export const SegmentCard = React.memo(function SegmentCard({
       }
     }
     if (uncheckedRows.length === 0) return;
+    for (const { setIndex } of uncheckedRows) if (!(await confirmSetWeight(exercise, setIndex))) return;
 
     setActiveSetKey(buildSetKey(exercise, uncheckedRows[uncheckedRows.length - 1].setIndex));
 
