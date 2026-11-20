@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { REQUIRED_CHECKS, validateSignoff } from "../validate-ios-signoff.mjs";
 const options = { buildId: "11111111-1111-4111-8111-111111111111", sourceCommit: "a".repeat(40), now: Date.parse("2026-09-23T12:00:00Z") };
@@ -16,4 +17,15 @@ test("enabled notification tap-through needs a passing device check", () => {
   assert.ok(validateSignoff(r, options).length);
   r.checks.notification_tap_through = "pass";
   assert.deepEqual(validateSignoff(r, options), []);
+});
+
+test("the sign-off template includes every field and cannot approve a release", () => {
+  const example = JSON.parse(readFileSync(new URL("../../../releases/ios/signoff.example.json", import.meta.url), "utf8"));
+  for (const key of Object.keys(record())) assert.ok(Object.hasOwn(example, key), key);
+  assert.deepEqual(Object.keys(example.checks).sort(), [...REQUIRED_CHECKS, "notification_tap_through"].sort());
+  assert.match(example.buildId, /^REPLACE/); assert.match(example.sourceCommit, /^REPLACE/);
+  const errors = validateSignoff(example, { ...options, buildId: example.buildId, sourceCommit: example.sourceCommit });
+  assert.ok(errors.length);
+  assert.ok(errors.some(error => error.includes("buildId")));
+  assert.ok(errors.some(error => error.includes("sourceCommit")));
 });

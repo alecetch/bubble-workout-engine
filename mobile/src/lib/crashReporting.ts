@@ -51,8 +51,16 @@ export function initCrashReporting(): void {
   });
 }
 
-export function reportError(error: Error, extra?: Record<string, unknown>): void {
+export function reportError(error: unknown, context: string): void;
+export function reportError(error: Error, extra?: Record<string, unknown>): void;
+export function reportError(error: unknown, extra?: Record<string, unknown> | string): void {
   if (!dsn) return;
+  if (typeof extra === "string") {
+    // Storage errors may contain credentials in their message or native details.
+    // Context-only reports deliberately discard the original exception and stack.
+    Sentry.captureException(new Error(extra), { tags: { context: extra } });
+    return;
+  }
   Sentry.captureException(error, extra ? { extra } : undefined);
 }
 

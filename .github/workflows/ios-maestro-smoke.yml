@@ -1,6 +1,8 @@
 name: iOS Maestro smoke
 
 on:
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       failure_injection:
@@ -50,7 +52,7 @@ jobs:
       REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
       E2E_EMAIL: ios-smoke@example.com
       E2E_PASSWORD: E2ePass123!
-      FAILURE_INJECTION: ${{ inputs.failure_injection }}
+      FAILURE_INJECTION: ${{ inputs.failure_injection || 'none' }}
       RUN_OWNER: ${{ github.actor }}
       MACOS_RATE_USD: ${{ vars.IOS_SMOKE_MACOS_RATE_USD }}
     steps:
@@ -94,17 +96,17 @@ jobs:
         run: bash scripts/ios-smoke-fixtures.sh
       - name: Restore exact simulator app cache
         id: app-cache
-        if: ${{ !inputs.cold_build }}
+        if: ${{ !(inputs.cold_build || false) }}
         uses: actions/cache/restore@v6
         with:
           path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/200Days.app
-          key: ios-smoke-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.6-ios26.5-${{ hashFiles('mobile/**', '!mobile/node_modules/**', '!mobile/.expo/**', '!mobile/android/**', '!mobile/ios/**', '!mobile/ios-smoke-build/**', 'scripts/ios-smoke-build.sh', '.github/workflows/ios-maestro-smoke.yml') }}
-      - name: Build bundled simulator app without distribution signing
+          key: ios-smoke-adhoc-v2-${{ runner.os }}-${{ runner.arch }}-xcode26.6-ios26.5-${{ hashFiles('mobile/**', '!mobile/node_modules/**', '!mobile/.expo/**', '!mobile/android/**', '!mobile/ios/**', '!mobile/ios-smoke-build/**', 'scripts/ios-smoke-build.sh', '.github/workflows/ios-maestro-smoke.yml') }}
+      - name: Build ad-hoc signed simulator app
         timeout-minutes: 35
         if: steps.app-cache.outputs.cache-hit != 'true'
         run: bash scripts/ios-smoke-build.sh
       - name: Save exact simulator app cache
-        if: ${{ !inputs.cold_build && steps.app-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !(inputs.cold_build || false) && steps.app-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: mobile/ios-smoke-build/Build/Products/Release-iphonesimulator/200Days.app
@@ -131,3 +133,8 @@ jobs:
           path: artifacts/ios-smoke
           retention-days: 14
           if-no-files-found: warn
+      - name: Ping successful smoke heartbeat
+        if: ${{ success() && vars.IOS_SMOKE_HEARTBEAT_URL != '' }}
+        env:
+          HEARTBEAT_URL: ${{ vars.IOS_SMOKE_HEARTBEAT_URL }}
+        run: curl -fsS -m 10 "$HEARTBEAT_URL"

@@ -13,8 +13,10 @@ function yaml(path) {
 }
 // Paths are relative to repository root.
 const workflow = yaml('.github/workflows/ios-maestro-smoke.yml')[0];
-test('iOS smoke is dispatch-only, bounded, and has no production secrets', () => {
-  assert.deepEqual(Object.keys(workflow.on), ['workflow_dispatch']);
+test('iOS smoke is nightly and dispatchable, bounded, and has no production secrets', () => {
+  assert.deepEqual(Object.keys(workflow.on).sort(), ['schedule', 'workflow_dispatch']);
+  assert.deepEqual(workflow.on.schedule, [{ cron: '0 3 * * *' }]);
+  assert.equal(workflow.on.pull_request, undefined);
   const job = workflow.jobs.smoke;
   assert.equal(job['runs-on'], 'macos-26');
   assert.equal(job['timeout-minutes'], 75);
@@ -28,6 +30,24 @@ test('iOS smoke is dispatch-only, bounded, and has no production secrets', () =>
   const cache = job.steps.find(step => step.id === 'app-cache').with;
   assert.ok(cache.key.includes('runner.arch') && cache.key.includes('hashFiles'));
   assert.equal(cache['restore-keys'], undefined);
+  assert.match(cache.key, /adhoc-v2/);
+});
+
+test('scheduled runs use safe defaults and heartbeat runs only on success', () => {
+  const job = workflow.jobs.smoke;
+  assert.equal(job.env.FAILURE_INJECTION, "${{ inputs.failure_injection || 'none' }}");
+  assert.equal(job.steps.find(step => step.id === 'app-cache').if, "${{ !(inputs.cold_build || false) }}");
+  const save = job.steps.find(step => step.uses?.startsWith('actions/cache/save@'));
+  assert.equal(save.if, "${{ !(inputs.cold_build || false) && steps.app-cache.outputs.cache-hit != 'true' }}");
+  const heartbeat = job.steps.find(step => step.name === 'Ping successful smoke heartbeat');
+  assert.equal(heartbeat.if, "${{ success() && vars.IOS_SMOKE_HEARTBEAT_URL != '' }}");
+  assert.equal(heartbeat.env.HEARTBEAT_URL, '${{ vars.IOS_SMOKE_HEARTBEAT_URL }}');
+  assert.equal(heartbeat.run, 'curl -fsS -m 10 "$HEARTBEAT_URL"');
+});
+
+test('smoke diagnostics are enabled only by the simulator build script', () => {
+  assert.match(read('scripts/ios-smoke-build.sh'), /export EXPO_PUBLIC_SMOKE_DIAGNOSTICS=true/);
+  assert.doesNotMatch(read('mobile/eas.json'), /EXPO_PUBLIC_SMOKE_DIAGNOSTICS/);
 });
 test('permission cases require actual fresh prompts and test session persistence', () => {
   for (const name of ['allow', 'deny']) {

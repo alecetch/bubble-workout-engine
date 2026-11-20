@@ -1,4 +1,5 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { reportError } from "../../lib/crashReporting";
 import { restoreSession } from "./restoreSession";
 import { ApiError } from "../../api/client";
 import { clearTokens, getAccessToken } from "../../api/tokenStorage";
@@ -7,6 +8,7 @@ import { getClientProfile } from "../../api/clientProfiles";
 import { getEntitlement } from "../../api/entitlement";
 import { useSessionStore } from "./sessionStore";
 import { queryClient } from "../../api/queryClient";
+vi.mock("../../lib/crashReporting", () => ({ reportError: vi.fn() }));
 vi.mock("../../api/config", () => ({ API_BASE_URL: "http://localhost:3000" }));
 vi.mock("../../api/tokenStorage", () => ({ getAccessToken: vi.fn(), clearTokens: vi.fn() }));
 vi.mock("../../api/me", () => ({ getMe: vi.fn() }));
@@ -81,4 +83,42 @@ it.each([
   expect(getMe).toHaveBeenCalledTimes(1);
   expect(getClientProfile).toHaveBeenCalledTimes(1);
   expect(getEntitlement).toHaveBeenCalledTimes(1);
+});
+
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+it("treats an unreadable saved token as signed out and reports it without a network call", async () => {
+  const error = Object.assign(new Error("private native message saved-token"), { code: -34018 });
+  vi.mocked(getAccessToken).mockRejectedValueOnce(error);
+  await expect(restoreSession()).resolves.toBe("signed_out");
+  expect(reportError).toHaveBeenCalledExactlyOnceWith(error, "session.token_read_failed");
+  expect(getMe).not.toHaveBeenCalled(); expect(getClientProfile).not.toHaveBeenCalled(); expect(getEntitlement).not.toHaveBeenCalled();
+  expect(clearTokens).not.toHaveBeenCalled();
+});
+it.each([
+  ["missing", "signed_out", "token_read"],
+  ["token_failure", "signed_out", "token_read"],
+  ["network_failure", "unreachable", "network"],
+  ["expired", "signed_out", "network"],
+  ["success", "restored", "network"],
+])("smoke trace emits one safe outcome line for %s", async (scenario, expected, stage) => {
+  vi.stubEnv("EXPO_PUBLIC_SMOKE_DIAGNOSTICS", "true");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const error = Object.assign(new TypeError("private native message saved-token user@example.test"), { code: -34018 });
+  if (scenario === "missing") vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+  if (scenario === "token_failure") vi.mocked(getAccessToken).mockRejectedValueOnce(error);
+  if (scenario === "network_failure") vi.mocked(getMe).mockRejectedValueOnce(error);
+  if (scenario === "expired") vi.mocked(getMe).mockRejectedValueOnce(new ApiError(401, "private native message", { code: "session_expired" }));
+  await expect(restoreSession()).resolves.toBe(expected);
+  expect(warn).toHaveBeenCalledTimes(1);
+  const text = String(warn.mock.calls[0][0]);
+  expect(text).toContain(`outcome=${expected} stage=${stage} error=`);
+  if (scenario.endsWith("failure")) { expect(text).toContain("error=TypeError"); expect(text).toContain("code=-34018"); }
+  for (const secret of ["private native message", "saved-token", "user@example.test"]) expect(text).not.toContain(secret);
+});
+it("real builds emit no smoke trace for token or network errors", async () => {
+  vi.stubEnv("EXPO_PUBLIC_SMOKE_DIAGNOSTICS", undefined);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.mocked(getAccessToken).mockRejectedValueOnce(new Error("private")); await restoreSession();
+  vi.mocked(getMe).mockRejectedValueOnce(new TypeError("network")); await restoreSession();
+  expect(warn).not.toHaveBeenCalled();
 });
