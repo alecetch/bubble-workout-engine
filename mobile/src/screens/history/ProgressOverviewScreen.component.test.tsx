@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -182,4 +183,5 @@ describe("ProgressOverviewScreen", () => {
       exerciseName: "Bench Press",
     });
   });
+  it("shows pound strength and peak volume",()=>{vi.mocked(useWeightUnit).mockReturnValue("lbs");renderScreen();expect(screen.getByText("220.5 lb")).toBeInTheDocument();expect(screen.getAllByText(/13,228 lb/).length).toBeGreaterThan(0);});
 });

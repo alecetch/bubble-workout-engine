@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -197,4 +198,6 @@ describe("ProgramCompleteScreen", () => {
     expect(screen.getByText("Bench Press")).toBeInTheDocument();
     expect(screen.getByText("100 kg")).toBeInTheDocument();
   });
+  it("shows personal-record highlights in pounds",()=>{vi.mocked(useWeightUnit).mockReturnValue("lbs");useProgramCompletionSummaryMock.mockReturnValue({data:{...summary,personalRecords:[{exerciseId:"squat",exerciseName:"Squat",bestWeightKg:61.23}]},isLoading:false,isError:false} as any);renderScreen();expect(screen.getByText("135 lb")).toBeInTheDocument();});
+
 });

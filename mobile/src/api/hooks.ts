@@ -5,3 +5,4 @@ export * from "./hooks/exerciseHooks";
 export * from "./hooks/settingsHooks";
 export * from "./hooks/referralHooks";
 export * from "./hooks/physiqueHooks";
+export * from "./hooks/useWeightUnit";

@@ -1,3 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { inputToKg, kgToInput, unitLabel } from "../../utils/trainingWeight";
 import { followSavedRoute, nextRouteAfterSave } from "./editModeRouting";
 import { useReviewEditBack } from "./useReviewEditBack";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +40,6 @@ type AnchorExerciseOption = {
   value: string;
 };
 
-const KG_TO_LBS = 2.2046;
 
 const FITNESS_TEST_DEFAULTS: Record<EstimationFamily, Record<string, number>> = {
   squat: { beginner: 40, intermediate: 80, advanced: 110, elite: 140 },
@@ -61,7 +62,7 @@ function makeDefaultDrafts(): CardDraftMap {
 }
 
 function sanitizeDecimal(text: string): string {
-  return text.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+  return text.replace(",", ".").replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
 }
 
 function fitnessLevelKey(level: string | null | undefined): string {
@@ -78,22 +79,18 @@ function placeholderKg(family: EstimationFamily, levelKey: string): number {
 function toDisplayPlaceholder(family: EstimationFamily, levelKey: string, unit: Unit): string {
   const kg = placeholderKg(family, levelKey);
   if (kg === 0) return "";
-  const value = unit === "lbs" ? Math.round(kg * KG_TO_LBS) : kg;
+  const value = kgToInput(kg, unit);
   return `e.g. ${value}`;
 }
 
 function convertEnteredValue(text: string, fromUnit: Unit, toUnit: Unit): string {
   if (fromUnit === toUnit) return text;
-  const value = Number.parseFloat(text);
-  if (!Number.isFinite(value) || value <= 0) return "";
-  if (fromUnit === "kg" && toUnit === "lbs") return String(Math.round(value * KG_TO_LBS));
-  return String(Math.round((value / KG_TO_LBS) * 10) / 10);
+  return kgToInput(inputToKg(text, fromUnit), toUnit);
 }
 
 function parseLoadKg(text: string, unit: Unit): number | null {
-  const value = Number.parseFloat(text);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return unit === "lbs" ? Math.round((value / KG_TO_LBS) * 10) / 10 : value;
+  const kg = inputToKg(text, unit);
+  return kg != null && kg > 0 ? kg : null;
 }
 
 function toAnchorOptions(
@@ -128,7 +125,7 @@ function UnitToggle({
           accessibilityLabel={`Use ${item}`}
         >
           <Text style={[styles.unitChipText, unit === item && styles.unitChipTextActive]}>
-            {item.toUpperCase()}
+            {unitLabel(item).toUpperCase()}
           </Text>
         </PressableScale>
       ))}
@@ -229,7 +226,7 @@ function AnchorFamilyRow({
             placeholderTextColor={colors.textSecondary}
             returnKeyType="done"
           />
-          <Text style={styles.weightUnitLabel}>{unit}</Text>
+          <Text style={styles.weightUnitLabel}>{unitLabel(unit)}</Text>
         </View>
         <RepsStepper value={card.reps} onChange={(reps) => onPatch({ reps })} />
       </View>
@@ -238,6 +235,7 @@ function AnchorFamilyRow({
 }
 
 export function Step2bBaselineLoadsScreen({ navigation, route }: Props): React.JSX.Element {
+  const queryClient = useQueryClient();
   const scrollRef = useRef<ScrollViewInstance | null>(null);
   const returnToReview = route?.params?.returnToReview ?? false;
   const editBack = useReviewEditBack(returnToReview, navigation, () => navigation.replace("Step2Equipment"));
@@ -310,6 +308,7 @@ export function Step2bBaselineLoadsScreen({ navigation, route }: Props): React.J
         anchorLiftsSkipped: true,
         preferredUnit: unit,
       });
+      queryClient.setQueryData(["preferredUnit"], unit);
       setDraft({ anchorLifts: [], anchorLiftsSkipped: true, preferredUnit: unit });
       followSavedRoute(navigation, nextRouteAfterSave("baselineLoads", { returnToReview }));
     } catch {
@@ -360,6 +359,7 @@ export function Step2bBaselineLoadsScreen({ navigation, route }: Props): React.J
         anchorLiftsSkipped: allSkipped,
         preferredUnit: unit,
       });
+      queryClient.setQueryData(["preferredUnit"], unit);
       setDraft({
         anchorLifts: allSkipped ? [] : anchorLifts,
         anchorLiftsSkipped: allSkipped,

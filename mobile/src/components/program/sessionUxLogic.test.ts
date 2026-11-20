@@ -248,3 +248,13 @@ for (const [entered,reference,expected] of [
   [400,null,null],[400.01,null,"too_high"],[200,undefined,null],[401,100,"too_high"],
   [20,0,null],[0,100,"lighter"],[NaN,100,null],
 ] as const) test(`weight plausibility ${entered} against ${reference}`,()=>expect(weightLooksUnusual(entered,reference)).toBe(expected));
+
+test("pound prefill and logged restoration produce kg rows at the save boundary",()=>{
+ const exercise={id:"ex",name:"Squat",sets:1,isLoadable:true,guidelineLoad:{value:60,unit:"kg",confidence:"high"}} as any;
+ expect(guidelinePrefill(exercise,"lbs")).toBe("130");
+ const initial=buildInitialSetInputMap([exercise],[],"lbs");expect(initial.ex[0].weight).toBe("130");
+ initial.ex[0]={weight:"135",reps:"5",rirActual:2};
+ expect(buildSegmentLogRows([exercise],initial,"lbs")[0].weightKg).toBe(61.23);
+ const restored=buildInitialSetInputMap([exercise],[{programExerciseId:"ex",orderIndex:1,weightKg:61.23,repsCompleted:5,rirActual:2} as any],"lbs");
+ expect(restored.ex[0].weight).toBe("135");expect(buildInitialSetInputMap([exercise],[],"kg").ex[0].weight).toBe("60");
+});

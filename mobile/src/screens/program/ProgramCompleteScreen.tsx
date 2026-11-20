@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatWeight } from "../../utils/trainingWeight";
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -156,6 +158,7 @@ export function buildPrefillProfile(
 }
 
 export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.Element {
+  const unit = useWeightUnit();
   const { programId } = route.params;
   const resetFromProfile = useOnboardingStore((state) => state.resetFromProfile);
   const summaryQuery = useProgramCompletionSummary(programId);
@@ -276,7 +279,7 @@ export function ProgramCompleteScreen({ route, navigation }: Props): React.JSX.E
             {personalRecords.map((record) => (
               <View key={`${record.exerciseId}-${record.exerciseName}`} style={styles.prCard}>
                 <Text style={styles.prExercise}>{record.exerciseName}</Text>
-                <Text style={styles.prValue}>{record.bestWeightKg} kg</Text>
+                <Text style={styles.prValue}>{formatWeight(record.bestWeightKg, unit)}</Text>
               </View>
             ))}
           </View>

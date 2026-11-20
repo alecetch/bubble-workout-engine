@@ -1,3 +1,4 @@
+import { unitLabel, type WeightUnit } from "../../../utils/trainingWeight";
 import { isOutboxAvailable } from "../../../sync/setLogOutbox";
 import type { SetSaveStatus } from "../hooks/useSetSaveStatus";
 import React, { useRef } from "react";
@@ -16,6 +17,7 @@ type Segment = ProgramDayFullResponse["segments"][number];
 type Exercise = Segment["exercises"][number];
 
 type InlineExerciseLogBlockProps = {
+  unit?: WeightUnit;
   exercise: Exercise;
   setInputs: SetInputState[];
   doneSetKeys: Set<string>;
@@ -46,6 +48,7 @@ function buildSetKey(exercise: Exercise, setIndex: number): string {
 }
 
 export function InlineExerciseLogBlock({
+  unit = "kg",
   exercise,
   setInputs,
   doneSetKeys,
@@ -90,7 +93,7 @@ export function InlineExerciseLogBlock({
                   editable={!pending}
                   value={setInput.weight}
                   onChangeText={(value) => {
-                    const sanitized = value.replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
+                    const sanitized = value.replace(",", ".").replace(/[^0-9.]/g, "").replace(/^(\d*\.?\d*).*$/, "$1");
                     onFillDown(exerciseKey, setIndex, "weight", sanitized, exercise);
                   }}
                   keyboardType="decimal-pad"
@@ -99,7 +102,7 @@ export function InlineExerciseLogBlock({
                   style={[styles.inputField, isDone && styles.inputFieldDone]}
                 />
                 <View style={styles.inputSuffixWrap}>
-                  <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>kg</Text>
+                  <Text style={[styles.inputSuffix, isDone && styles.inputSuffixDone]}>{unitLabel(unit)}</Text>
                 </View>
               </View>
             )}

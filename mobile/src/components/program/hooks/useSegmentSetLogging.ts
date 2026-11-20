@@ -1,5 +1,6 @@
+import { inputToKg, kgToInput, type WeightUnit } from "../../../utils/trainingWeight";
 import type { OutboxEntry } from "../../../sync/setLogOutbox";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { ProgramDayFullResponse } from "../../../api/programViewer";
 import type { SegmentLogRow } from "../../../api/segmentLog";
@@ -18,6 +19,7 @@ function isUnloadedExercise(exercise: Exercise): boolean {
 }
 
 export function useSegmentSetLogging(params: {
+  unit?: WeightUnit;
   outboxEntries?: OutboxEntry[];
   outboxLoaded?: boolean;
   loggableExercises: Exercise[];
@@ -40,6 +42,7 @@ export function useSegmentSetLogging(params: {
   initialized: boolean;
 } {
   const {
+    unit = "kg",
     loggableExercises,
     existingLogsQuery,
     inlineLoggingOpen,
@@ -54,6 +57,21 @@ export function useSegmentSetLogging(params: {
   const [doneSetKeys, setDoneSetKeys] = useState<Set<string>>(new Set());
   const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  const previousUnit = useRef(unit);
+  useEffect(() => {
+    const oldUnit = previousUnit.current;
+    if (oldUnit === unit) return;
+    previousUnit.current = unit;
+    setInputMap(current => Object.fromEntries(Object.entries(current).map(([key, sets]) => [key,
+      sets.map((set, index) => {
+        const exercise = loggableExercises.find(ex => ex.id === key);
+        const logged = existingLogsQuery.data?.some(row => row.programExerciseId === key && row.orderIndex === index + 1)
+          || params.outboxEntries?.some(entry => entry.row.programExerciseId === key && entry.row.orderIndex === index + 1);
+        const pristine = exercise && !logged && set.weight === guidelinePrefill(exercise, oldUnit);
+        return { ...set, weight: pristine ? guidelinePrefill(exercise, unit) : kgToInput(inputToKg(set.weight, oldUnit), unit) };
+      })])));
+  }, [unit]);
 
   useEffect(() => {
     if (!inlineLoggingOpen && !preserveInputs) {
@@ -74,7 +92,7 @@ export function useSegmentSetLogging(params: {
           sets.push({ ...(sets[sets.length - 1] ?? { weight: "", reps: "", rirActual: null }) });
         }
         const input = sets?.[row.orderIndex - 1];
-        if (input) { input.weight = row.weightKg == null ? "" : String(row.weightKg);
+        if (input) { input.weight = row.weightKg == null ? "" : kgToInput(row.weightKg, unit);
           input.reps = row.repsCompleted == null ? "" : String(row.repsCompleted); input.rirActual = row.rirActual; }
       }
       return inputs;
@@ -89,8 +107,8 @@ export function useSegmentSetLogging(params: {
       const nextInputMap = Object.fromEntries(
         loggableExercises.map((exercise) => {
           const key = exercise.id ?? "";
-          const prefilled = buildInitialSetInputMap([exercise], existingRows)[key] ?? [];
-          const prefillWeight = isUnloadedExercise(exercise) ? "" : guidelinePrefill(exercise);
+          const prefilled = buildInitialSetInputMap([exercise], existingRows, unit)[key] ?? [];
+          const prefillWeight = isUnloadedExercise(exercise) ? "" : guidelinePrefill(exercise, unit);
           const prefillReps = repsPrefill(exercise);
           return [
             key,
@@ -125,7 +143,7 @@ export function useSegmentSetLogging(params: {
       setInitialized(true);
       return;
     }
-    const nextInputMap = overlay(buildInitialSetInputMap(loggableExercises, existingRows));
+    const nextInputMap = overlay(buildInitialSetInputMap(loggableExercises, existingRows, unit));
     const restoredKeys = restoreKeys(nextInputMap);
     setInputMap(overlay(nextInputMap));
     setExerciseRirMap(
@@ -142,6 +160,7 @@ export function useSegmentSetLogging(params: {
     setExerciseRirMap(current => ({ ...current, ...Object.fromEntries(queued.map(e => [e.row.programExerciseId, e.row.rirActual])) }));
     setInitialized(true);
   }, [
+    unit,
     params.outboxEntries,
     params.outboxLoaded,
     existingLogsQuery.data,

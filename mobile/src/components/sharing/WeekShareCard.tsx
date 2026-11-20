@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatVolume } from "../../utils/trainingWeight";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -18,8 +20,9 @@ export function WeekShareCard({
   cardRef,
   onReady,
 }: WeekShareCardProps): React.JSX.Element {
+  const unit = useWeightUnit();
   const volumeDisplay =
-    totalVolumeKg >= 1000
+    unit === "lbs" ? formatVolume(totalVolumeKg, unit) : totalVolumeKg >= 1000
       ? `${(totalVolumeKg / 1000).toFixed(1)}t`
       : `${Math.round(totalVolumeKg).toLocaleString()} kg`;
 

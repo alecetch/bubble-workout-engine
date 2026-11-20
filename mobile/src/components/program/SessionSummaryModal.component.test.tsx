@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SessionSummaryModal } from "./SessionSummaryModal";
@@ -106,4 +107,5 @@ describe("SessionSummaryModal", () => {
     fireEvent.click(doneButton);
     expect(onDismiss).not.toHaveBeenCalled();
   });
+  it("shows pound volume",()=>{vi.mocked(useWeightUnit).mockReturnValue("lbs");render(<SessionSummaryModal {...defaultProps({totalVolumeKg:5443.1})}/>);expect(screen.getByText("12,000 lb")).toBeInTheDocument();});
 });

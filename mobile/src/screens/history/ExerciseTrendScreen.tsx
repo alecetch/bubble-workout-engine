@@ -1,3 +1,5 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatWeight, formatVolume, type WeightUnit } from "../../utils/trainingWeight";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -46,9 +48,10 @@ function shouldRenderAxisLabel(index: number, total: number): boolean {
   return index % 2 === 0;
 }
 
-function formatKg(value: number | null | undefined): string {
+function formatHistoryWeight(value: number | null | undefined, unit: WeightUnit): string {
   if (!Number.isFinite(value)) return "n/a";
   const numeric = value as number;
+  if (unit === "lbs") return formatWeight(numeric, unit);
   return Number.isInteger(numeric) ? `${numeric} kg` : `${numeric.toFixed(1)} kg`;
 }
 
@@ -67,6 +70,8 @@ function decisionColor(outcome: string | null): string {
 }
 
 export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Element {
+  const unit = useWeightUnit();
+  const formatKg = (value: number | null | undefined) => formatHistoryWeight(value, unit);
   const { exerciseId, exerciseName } = route.params;
   const userId = useSessionStore((state) => state.userId) ?? undefined;
   const [window, setWindow] = useState<ExerciseHistoryWindow>("12w");
@@ -179,7 +184,7 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                   fontSize={10}
                   textAnchor="end"
                 >
-                  {`${maxVal.toFixed(0)} kg`}
+                  {formatWeight(maxVal, unit, { decimals: 0 })}
                 </SvgText>
                 <SvgText
                   x={padding.left - 4}
@@ -188,7 +193,7 @@ export function ExerciseTrendScreen({ route, navigation }: Props): React.JSX.Ele
                   fontSize={10}
                   textAnchor="end"
                 >
-                  {`${minVal.toFixed(0)} kg`}
+                  {formatWeight(minVal, unit, { decimals: 0 })}
                 </SvgText>
                 <Line
                   x1={padding.left}

@@ -27,6 +27,7 @@ function renderPanel(
 ) {
   return render(
     <RoundBasedLoggingPanel
+      unit={props.unit}
       totalRounds={props.totalRounds ?? 3}
       completedRoundIndices={props.completedRoundIndices ?? new Set()}
       activeRoundIndex={props.activeRoundIndex ?? 0}
@@ -189,4 +190,5 @@ describe("RoundBasedLoggingPanel", () => {
     expect(screen.getByText("00:30")).toBeInTheDocument();
     expect(content.indexOf("00:30")).toBeLessThan(content.indexOf("How many more reps"));
   });
+  it("labels round weights in pounds",()=>{renderPanel({unit:"lbs"});expect(screen.getAllByText("lb").length).toBeGreaterThan(0);expect(screen.queryByText("kg")).not.toBeInTheDocument();});
 });

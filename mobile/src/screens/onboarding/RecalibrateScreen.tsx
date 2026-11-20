@@ -282,6 +282,7 @@ export function RecalibrateScreenB({ route, navigation }: RecalibrateBProps): Re
       const updatedProfile = await updateProfile.mutateAsync(
         payload as Parameters<typeof updateProfile.mutateAsync>[0],
       );
+      if (payload.preferredUnit) queryClient.setQueryData(["preferredUnit"], payload.preferredUnit);
       const nextDaysCount = Array.isArray(draft.preferredDays) ? draft.preferredDays.length : 0;
       const shouldReviewSplit = includes("schedule") && nextDaysCount > 0;
 

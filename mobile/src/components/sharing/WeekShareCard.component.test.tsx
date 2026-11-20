@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import { BRAND_WORDMARK } from "../../config/brand";
 import React from "react";
 import { render, screen } from "@testing-library/react";
@@ -20,4 +21,6 @@ describe("WeekShareCard", () => {
     expect(screen.getByText(`Training with ${BRAND_WORDMARK}`)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("Formai");
   });
+  it("shares pound volume",()=>{vi.mocked(useWeightUnit).mockReturnValue("lbs");render(<WeekShareCard weekNumber={3} sessionsCompleted={4} totalVolumeKg={5443.1} cardRef={React.createRef()}/>);expect(screen.getByText("12,000 lb")).toBeInTheDocument();});
+
 });

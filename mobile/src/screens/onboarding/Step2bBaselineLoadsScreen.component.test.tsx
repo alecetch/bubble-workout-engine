@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -255,8 +256,8 @@ describe("Step2bBaselineLoadsScreen", () => {
     expect(screen.getByPlaceholderText("e.g. 80")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use lbs" }));
 
-    expect(screen.getAllByText("lbs").length).toBeGreaterThan(0);
-    expect(screen.getByPlaceholderText("e.g. 176")).toBeInTheDocument();
+    expect(screen.getAllByText("lb").length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText("e.g. 176.4")).toBeInTheDocument();
   });
 
   it("saves a kg load for the squat row", async () => {
@@ -295,7 +296,7 @@ describe("Step2bBaselineLoadsScreen", () => {
         anchorLifts: expect.arrayContaining([
           expect.objectContaining({
             estimationFamily: "squat",
-            loadKg: 99.8,
+            loadKg: 99.79,
             skipped: false,
           }),
         ]),
@@ -425,5 +426,11 @@ describe("Step2bBaselineLoadsScreen", () => {
       );
       expect(navigation.replace).toHaveBeenCalledWith("YearGoal");
     });
+  });
+  it("saves pounds as precise kg and caches the preference",async()=>{
+    const setQueryData=vi.fn();vi.mocked(useQueryClient).mockReturnValue({setQueryData} as any);renderScreen();
+    fireEvent.click(screen.getByRole("button",{name:"Use lbs"}));changeSquatWeight("135");fireEvent.click(screen.getByRole("button",{name:"Continue"}));
+    await waitFor(()=>expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({preferredUnit:"lbs",anchorLifts:expect.arrayContaining([expect.objectContaining({loadKg:61.23})])})));
+    expect(setQueryData).toHaveBeenCalledWith(["preferredUnit"],"lbs");
   });
 });

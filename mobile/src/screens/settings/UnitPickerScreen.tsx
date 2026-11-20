@@ -14,7 +14,7 @@ type Props = NativeStackScreenProps<SettingsStackParamList, "UnitPicker">;
 
 const WEIGHT_OPTIONS: { value: "kg" | "lbs"; label: string }[] = [
   { value: "kg", label: "kg — Kilograms" },
-  { value: "lbs", label: "lbs — Pounds" },
+  { value: "lbs", label: "lb — Pounds" },
 ];
 
 const HEIGHT_OPTIONS: { value: "cm" | "ft"; label: string }[] = [
@@ -81,6 +81,7 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
           })}
         </View>
 
+        <Text style={styles.note}>Used for body weight and training weights.</Text>
         <Text style={styles.sectionLabel}>HEIGHT</Text>
         <View style={styles.card}>
           {HEIGHT_OPTIONS.map((option, index) => {

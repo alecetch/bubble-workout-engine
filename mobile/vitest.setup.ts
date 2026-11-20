@@ -1,3 +1,8 @@
+// Most component tests pin existing kg behavior. Unit-specific cases override this
+// boundary; useWeightUnit.unit.test.ts exercises the real query subscription.
+const { weightUnitMock } = vi.hoisted(() => ({ weightUnitMock: vi.fn(() => "kg") }));
+vi.mock("./src/api/hooks/useWeightUnit", () => ({ useWeightUnit: weightUnitMock }));
+beforeEach(() => weightUnitMock.mockReturnValue("kg"));
 import "@testing-library/jest-dom";
 import { cleanup } from "@testing-library/react";
 import { configureAxe, toHaveNoViolations } from "jest-axe";

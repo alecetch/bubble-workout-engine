@@ -1,3 +1,4 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
 import { Alert } from "react-native";
 import * as setOutbox from "../../sync/setLogOutbox";
 import { entry as queuedEntry } from "../../sync/outboxTestFixture";
@@ -1393,4 +1394,40 @@ describe("SegmentCard — round-based logging (superset)", () => {
     expect(await screen.findByText("Round 1")).toBeInTheDocument();
     expect(screen.queryByText("Resume")).not.toBeInTheDocument();
   });
+  it("pound prefill saves kg and restores the same pounds", async()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");
+    const props={segment:makeSegment({},[makeExercise({sets:1,guidelineLoad:{value:60,unit:"kg",confidence:"high"}})])};
+    const card=renderCard(props);fireEvent.click(screen.getByText("Start Exercise"));
+    expect(screen.getByDisplayValue("130")).toBeInTheDocument();expect(screen.getByText("lb")).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("130"),{target:{value:"135"}});
+    fireEvent.click(screen.getByRole("button",{name:"Barbell Squat set 1 complete"}));
+    await waitForSlow(()=>expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({rows:[expect.objectContaining({weightKg:61.23})]})));
+    card.unmount();existingLogRows=[{id:"saved",programExerciseId:"ex-1",orderIndex:1,weightKg:61.23,repsCompleted:8,rirActual:null}];
+    renderCard(props);fireEvent.click(screen.getByText("Start Exercise"));expect(await screen.findByDisplayValue("135")).toBeInTheDocument();
+  });
+  it("unusual pound entries are compared as kg and confirmed in pounds",async()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");const alert=vi.spyOn(Alert,"alert").mockImplementation(()=>{});
+    try{renderCard({segment:makeSegment({},[makeExercise({sets:1,guidelineLoad:{value:60,unit:"kg",confidence:"high"}})])});
+      fireEvent.click(screen.getByText("Start Exercise"));fireEvent.change(screen.getByDisplayValue("130"),{target:{value:"300"}});
+      fireEvent.click(screen.getByRole("button",{name:"Barbell Squat set 1 complete"}));
+      await waitForSlow(()=>expect(alert).toHaveBeenCalledTimes(1));expect(alert.mock.calls[0][1]).toContain("Save 300 lb?");
+    }finally{alert.mockRestore();}
+  });
+  it("restores and edits offline pound inputs while the outbox remains kg",async()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");await setOutbox.clear("pound-user");
+    await setOutbox.enqueue("pound-user",[queuedEntry({key:"day-1:seg-1:ex-1:1",programDayId:"day-1",workoutSegmentId:"seg-1",row:{...queuedEntry().row,programExerciseId:"ex-1",weightKg:61.23}})]);
+    onlineManager.setOnline(false);
+    try{renderCard({userId:"pound-user"});fireEvent.click(screen.getByText("Start Exercise"));
+      const input=await screen.findByDisplayValue("135");fireEvent.change(input,{target:{value:"140"}});
+      await waitForSlow(async()=>expect((await setOutbox.list("pound-user"))[0].row.weightKg).toBe(63.5));
+      expect(mutateAsyncMock).not.toHaveBeenCalled();
+    }finally{onlineManager.setOnline(true);await setOutbox.clear("pound-user");}
+  });
+  it("updates live pound inputs when the preference changes without a restart",async()=>{
+    const props={segment:makeSegment({},[makeExercise({sets:1,guidelineLoad:{value:60,unit:"kg",confidence:"high"}})])};
+    const card=renderCard(props);fireEvent.click(screen.getByText("Start Exercise"));expect(screen.getByDisplayValue("60")).toBeInTheDocument();
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");card.rerender(segmentCardElement({...props,isLogged:true}));
+    await waitForSlow(()=>expect(screen.getByDisplayValue("130")).toBeInTheDocument());
+  });
+
 });
