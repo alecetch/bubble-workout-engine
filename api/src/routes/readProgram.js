@@ -10,7 +10,7 @@ import { pool } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { makeGuidelineLoadService } from "../services/guidelineLoadService.js";
 import { makeNotificationService } from "../services/notificationService.js";
-import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
+import { getDaysSinceLastTraining, loadProgressionConfig, resolveProfileName, resolveLoadIncrement, resolveLayoffAdjustment, applyJumpCap, makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { buildExerciseMediaUrl, resolveMediaUrl } from "../utils/mediaUrl.js";
 import { publicInternalError } from "../utils/publicError.js";
 import { RequestValidationError, requireUuid, safeString } from "../utils/validate.js";
@@ -490,6 +490,7 @@ export function createReadProgramHandlers(options = pool) {
           d.equipment_override_preset_slug,
           d.equipment_override_items_slugs,
           p.client_profile_id,
+          p.program_type,
           d.hero_media_id,
           ma.image_key  AS hero_image_key,
           ma.image_url  AS hero_image_url,
@@ -581,6 +582,8 @@ export function createReadProgramHandlers(options = pool) {
           pe.progression_source,
           pe.progression_reasoning_json,
           pe.recommended_load_kg,
+          ec.equipment_items_slugs,
+          eps.last_decision_context_json->'evidence'->>'trusted_load_kg' AS trusted_load_kg,
           pe.recommended_reps_target,
           pe.recommended_sets,
           pe.recommended_rest_seconds,
@@ -620,6 +623,7 @@ export function createReadProgramHandlers(options = pool) {
           cm.poster_frame_key AS cooldown_poster_frame_key,
           (eps.exercise_id IS NULL) AS is_new_exercise
         FROM program_exercise pe
+        LEFT JOIN exercise_catalogue ec ON ec.exercise_id = pe.exercise_id
         LEFT JOIN exercise_media em
           ON em.exercise_id = pe.exercise_id
         LEFT JOIN warmup_exercise we
@@ -633,11 +637,29 @@ export function createReadProgramHandlers(options = pool) {
         LEFT JOIN exercise_progression_state eps
           ON eps.user_id = $2
           AND eps.exercise_id = pe.exercise_id
+          AND eps.purpose = pe.purpose
+          AND eps.program_type = $3
         WHERE pe.program_day_id = $1
         ORDER BY pe.order_in_day
         `,
-        [program_day_id, user_id],
+        [program_day_id, user_id, day.program_type],
       );
+
+      const daysSinceLastTraining = await getDaysSinceLastTraining(client, user_id);
+      const { config: progressionConfig } = await loadProgressionConfig(client, day.program_type);
+      for (const exercise of exR.rows) {
+        const trusted = exercise.trusted_load_kg == null ? null : Number(exercise.trusted_load_kg);
+        const increment = resolveLoadIncrement(resolveProfileName(progressionConfig, day.program_type, exercise.purpose), progressionConfig, exercise, trusted, {});
+        const adjustment = resolveLayoffAdjustment({ daysSinceLastTraining, trustedLoadKg: trusted, recommendedLoadKg: exercise.recommended_load_kg == null ? null : Number(exercise.recommended_load_kg), increment, safety: progressionConfig.safety });
+        const capped = applyJumpCap(adjustment.loadKg, trusted, increment, progressionConfig.safety);
+        exercise.recommended_load_kg = capped.loadKg;
+        exercise.layoff_adjusted = adjustment.band !== "none";
+        exercise.layoff_band = adjustment.band;
+        exercise.progression_reasoning_json = [...(Array.isArray(exercise.progression_reasoning_json) ? exercise.progression_reasoning_json : []), ...(adjustment.reason ? [adjustment.reason] : []), ...(capped.capped ? ["Capped to a safe step from your last confirmed weight."] : [])];
+        if (adjustment.band === "major") exercise.progression_confidence = "low";
+        delete exercise.trusted_load_kg;
+        delete exercise.equipment_items_slugs;
+      }
 
       const programExerciseIds = exR.rows
         .map((row) => row.program_exercise_id)
@@ -716,6 +738,7 @@ export function createReadProgramHandlers(options = pool) {
         segment_type_label: segmentTypeLabel(seg.segment_type),
         items: (itemsBySegmentId.get(seg.workout_segment_id) || []).map((item) => {
           const {
+            layoff_adjusted, layoff_band,
             progression_outcome,
             progression_primary_lever,
             progression_confidence,
@@ -765,6 +788,8 @@ export function createReadProgramHandlers(options = pool) {
             videoStatus: resolvedVideoStatus,
             progression_recommendation: progression_outcome
               ? {
+                  layoff_adjusted,
+                  layoff_band,
                   outcome: progression_outcome,
                   primary_lever: progression_primary_lever,
                   confidence: progression_confidence,
@@ -790,6 +815,7 @@ export function createReadProgramHandlers(options = pool) {
         .filter((x) => !x.workout_segment_id)
         .map((item) => {
           const {
+            layoff_adjusted, layoff_band,
             progression_outcome,
             progression_primary_lever,
             progression_confidence,
@@ -815,6 +841,8 @@ export function createReadProgramHandlers(options = pool) {
             videoStatus: resolvedVideoStatus,
             progression_recommendation: progression_outcome
               ? {
+                  layoff_adjusted,
+                  layoff_band,
                   outcome: progression_outcome,
                   primary_lever: progression_primary_lever,
                   confidence: progression_confidence,

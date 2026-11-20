@@ -9,7 +9,7 @@ import { importEmitterPayload } from "../services/importEmitterService.js";
 import { buildInputsFromProfile } from "../services/buildInputsFromProfile.js";
 import { ensureProgramCalendarCoverage } from "../services/calendarCoverage.js";
 import { getProfileById, getProfileByUserId, getOwnedProfile as defaultGetOwnedProfile } from "../services/clientProfileService.js";
-import { makeProgressionDecisionService } from "../services/progressionDecisionService.js";
+import { getDaysSinceLastTraining, makeProgressionDecisionService } from "../services/progressionDecisionService.js";
 import { programCalendarDayHasUserIdColumn } from "../services/programCalendarDaySchema.js";
 import { programHasIsPrimaryColumn } from "../services/programSchema.js";
 import { publicInternalError } from "../utils/publicError.js";
@@ -528,11 +528,14 @@ export function createGenerateProgramV2Handler({
       generation_run_id,
     }, "Pipeline starting");
 
+    const now = new Date();
+    const daysSinceLastTraining = await getDaysSinceLastTraining(db, pg_user_id, now);
     const pipelineOut = await pipeline({
+      daysSinceLastTraining, now,
       db,
       inputs,
       programType,
-      userId: user_id,
+      userId: pg_user_id,
       request: {
         anchor_date_ms,
         allowed_ids_csv,

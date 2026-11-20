@@ -20,20 +20,21 @@ function mockRes() {
 
 function mockPool(responses) {
   let i = 0;
-  function nextResponse() {
+  function nextResponse(sql) {
+    if (sql.includes("max(sel.created_at)") || sql.includes("FROM program_generation_config")) return {rows:[],rowCount:0};
     const response = responses[i++];
     if (!response) throw new Error(`Unexpected DB call at index ${i - 1}`);
     if (response instanceof Error) throw response;
     return response;
   }
   return {
-    async query() {
-      return nextResponse();
+    async query(sql) {
+      return nextResponse(sql);
     },
     async connect() {
       return {
-        async query() {
-          return nextResponse();
+        async query(sql) {
+          return nextResponse(sql);
         },
         release() {},
       };

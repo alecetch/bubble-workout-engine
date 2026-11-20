@@ -49,6 +49,10 @@ function shapeHistory(history) {
     }
 
     return {
+      // Legacy sandbox entries represent sessions; explicit IDs let callers model multiple sets.
+      program_day_id: toText(entry?.program_day_id) || `sandbox-session-${index}`,
+      order_index: toPositiveInt(entry?.order_index) ?? 1,
+      created_at: entry?.created_at ?? new Date(Date.UTC(2026, 0, 28 - index)).toISOString(),
       log_id: toText(entry?.log_id ?? entry?.logId) || `sandbox-${index + 1}`,
       weight_kg: weightKg,
       reps_completed: repsCompleted,

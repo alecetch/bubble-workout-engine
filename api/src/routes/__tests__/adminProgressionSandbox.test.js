@@ -290,3 +290,12 @@ test("valid request surfaces config_used profile name", async () => {
   assert.equal(res.body.config_used.profile_name, "strength_main");
   assert.equal(res.body.config_used.rank_key, "intermediate");
 });
+
+test("sets in one sandbox session cannot trigger a deload",async()=>{
+  const handler=createProgressionSandboxHandler(createDbMock({exerciseRow:{is_loadable:true,equipment_items_slugs:["barbell"]}}));
+  const res=mockRes();
+  await handler(mockReq({program_type:"strength",fitness_rank:1,purpose:"main",reps_prescribed:"5",intensity_prescription:"2 RIR",
+    history:[1,2,3].map(order_index=>({program_day_id:"one-session",order_index,created_at:"2026-01-01",weight_kg:100,reps_completed:3,rir_actual:0}))}),res);
+  // Sessions, not failed sets, count toward the deload threshold.
+  assert.equal(res.body.outcome,"hold");assert.equal(res.body.evidence.sessions_considered,1);
+});

@@ -264,3 +264,13 @@ export function findNextUncheckedSetKey(
   }
   return null;
 }
+
+export function weightLooksUnusual(enteredKg: number, referenceKg?: number | null): "heavier" | "lighter" | "too_high" | null {
+  if (!Number.isFinite(enteredKg) || enteredKg < 0) return null;
+  if (enteredKg > 400) return "too_high";
+  if (referenceKg != null && Number.isFinite(referenceKg) && referenceKg > 0) {
+    if (enteredKg > referenceKg * 1.5) return "heavier";
+    if (enteredKg < referenceKg * 0.5) return "lighter";
+  }
+  return null;
+}

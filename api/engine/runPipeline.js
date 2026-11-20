@@ -16,7 +16,7 @@ import { applyExerciseProgressionOverrides } from "./steps/07_applyExerciseProgr
 import { fetchActiveMediaAssets } from "../src/services/mediaAssets.js";
 import { fetchActiveNarrationTemplates } from "../src/services/narrationTemplates.js";
 import { fetchActiveRepRules } from "../src/services/repRules.js";
-import { rankKey } from "../src/services/progressionDecisionService.js";
+import { makeDefaultProgressionConfig, mergeProgressionConfig, rankKey } from "../src/services/progressionDecisionService.js";
 import { resolveHeroMediaRow, toHeroMediaObject, dayFocusSlug } from "./resolveHeroMedia.js";
 import { resolveCompiledConfig } from "./resolveCompiledConfig.js";
 import { validateCompiledConfig } from "./configValidation.js";
@@ -104,7 +104,7 @@ function hardcodedProgramGenerationConfigRow(programType, schemaVersion) {
   };
 }
 
-export async function runPipeline({ inputs, programType, request, db, userId }) {
+export async function runPipeline({ inputs, programType, request, db, userId, daysSinceLastTraining = null, now = new Date() }) {
   const dbClient = db || pool;
   const schemaVersion = 1;
   const compiledConfig = await resolveCompiledConfig(dbClient, { programType, schemaVersion, request });
@@ -144,7 +144,7 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
     try {
       const psResult = await dbClient.query(
         `SELECT exercise_id, purpose, current_load_kg_override, current_rep_target_override,
-                current_set_override, current_rest_sec_override, last_outcome, confidence
+                current_set_override, current_rest_sec_override, last_outcome, confidence, last_decided_at, last_decision_context_json
          FROM exercise_progression_state
          WHERE user_id = $1 AND program_type = $2`,
         [userId, programType],
@@ -268,6 +268,8 @@ export async function runPipeline({ inputs, programType, request, db, userId }) 
       program: step4.program,
       progressionStateMap,
       deloadWeekIndex,
+      daysSinceLastTraining, now, programType,
+      config: mergeProgressionConfig(makeDefaultProgressionConfig(programType), pgcJson),
     });
     step7.debug = step7.debug || {};
     step7.debug.source = progressionStateSource;

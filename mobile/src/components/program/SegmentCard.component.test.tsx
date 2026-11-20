@@ -1,3 +1,4 @@
+import { Alert } from "react-native";
 import * as setOutbox from "../../sync/setLogOutbox";
 import { entry as queuedEntry } from "../../sync/outboxTestFixture";
 import { onlineManager } from "@tanstack/react-query";
@@ -183,6 +184,53 @@ describe("SegmentCard", () => {
     setMockTimerState();
   });
 
+  for (const action of ["Save", "Edit"] as const) it(`unusual weight alert ${action} preserves normal save behavior`, async () => {
+    const alert = vi.spyOn(Alert, "alert").mockImplementation(() => {});
+    try {
+      renderCard({ segment: makeSegment({}, [makeExercise({ sets: 1, guidelineLoad: { value: 20, unit: "kg", confidence: "medium" } })]) });
+      fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.change(screen.getByDisplayValue("20"), { target: { value: "200" } });
+      fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
+      await waitForSlow(() => expect(alert).toHaveBeenCalledTimes(1));
+      expect(alert.mock.calls[0][0]).toBe("Check this weight");
+      expect(alert.mock.calls[0][1]).toBe("That's much heavier than last time. Save 200 kg?");
+      expect(mutateAsyncMock).not.toHaveBeenCalled();
+      await act(async () => { alert.mock.calls[0][2]?.find(button => button.text === action)?.onPress?.(); });
+      if (action === "Save") await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({rows:[expect.objectContaining({weightKg:200})]})));
+      else {
+        expect(mutateAsyncMock).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }).querySelector('[data-icon="checkbox-outline"]')).toBeInTheDocument();
+        expect(screen.getByDisplayValue("200")).toHaveFocus();
+        fireEvent.click(screen.getByRole("button", { name: "Barbell Squat set 1 complete" }));
+        await waitForSlow(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+        expect(alert).toHaveBeenCalledTimes(1);
+      }
+    } finally { alert.mockRestore(); }
+  });
+  it("normal weight saves without a confirmation", async () => {
+    const alert=vi.spyOn(Alert,"alert");
+    try {
+      renderCard(); fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.click(screen.getByRole("button",{name:"Barbell Squat set 1 complete"}));
+      await waitForSlow(()=>expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+      expect(alert).not.toHaveBeenCalled();
+    } finally { alert.mockRestore(); }
+  });
+  it("a confirmed set and value are not prompted again after a failed save", async () => {
+    const alert=vi.spyOn(Alert,"alert").mockImplementation(()=>{});
+    try {
+      mutateAsyncMock.mockRejectedValueOnce(new ApiError(503,"unavailable"));
+      renderCard({segment:makeSegment({},[makeExercise({sets:1,guidelineLoad:{value:20,unit:"kg",confidence:"medium"}})])});
+      fireEvent.click(screen.getByText("Start Exercise"));
+      fireEvent.change(screen.getByDisplayValue("20"),{target:{value:"200"}});
+      fireEvent.click(screen.getByRole("button",{name:"Barbell Squat set 1 complete"}));
+      await act(async()=>{alert.mock.calls[0][2]?.find(b=>b.text==="Save")?.onPress?.();});
+      fireEvent.click(await screen.findByRole("button",{name:"Barbell Squat set 1 not saved. Double-tap to retry."}));
+      await waitForSlow(()=>expect(mutateAsyncMock).toHaveBeenCalledTimes(2));
+      expect(alert).toHaveBeenCalledTimes(1);
+    } finally {alert.mockRestore();}
+  });
+
   it("restores saved ticks and summary without saves or just-finished effects", async () => {
     existingLogRows = savedRows(2);
     const count = vi.fn(), allSaved = vi.fn(), prs = vi.fn();
@@ -249,7 +297,7 @@ describe("SegmentCard", () => {
       expect(screen.getByText("Not saved. Tap the set to retry.")).toBeInTheDocument();
       expect(counts).not.toHaveBeenCalledWith(expect.anything(), 1);
       expect(allSaved).not.toHaveBeenCalled();
-      expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 1, expect.any(Array));
+      await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 1, expect.any(Array)));
     });
   }
   it("save regression: log-all failure leaves every row unsaved", async () => {
@@ -260,7 +308,7 @@ describe("SegmentCard", () => {
     fireEvent.click(await screen.findByText("Log all sets as complete"));
     expect((await screen.findAllByRole("button", { name: /not saved. Double-tap to retry/ })).length).toBe(3);
     expect(allSaved).not.toHaveBeenCalled();
-    expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 3, expect.any(Array));
+    await waitForSlow(() => expect(unsaved).toHaveBeenLastCalledWith(expect.anything(), 3, expect.any(Array)));
   });
   it("retries a failed set with its original row, then counts it only after success", async () => {
     mutateAsyncMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
