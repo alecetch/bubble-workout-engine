@@ -61,44 +61,74 @@ function mapPrefRow(row) {
   };
 }
 
-notificationPreferencesRouter.patch("/users/me/push-token", async (req, res) => {
-  const { request_id } = req;
-  try {
-    const userId = resolveUserId(req);
-    const rawToken = req.body?.push_token;
+export function createPushTokenHandler(db = pool) {
+  return async (req, res) => {
+    const { request_id } = req;
+    try {
+      const userId = resolveUserId(req);
+      const rawToken = req.body?.push_token;
 
-    if (rawToken !== null && rawToken !== undefined) {
-      const token = safeString(rawToken);
-      if (!token || !PUSH_TOKEN_RE.test(token)) {
-        throw new RequestValidationError(
-          "push_token must match ExponentPushToken[...] format or be null",
-        );
+      if (rawToken !== null && rawToken !== undefined) {
+        const token = safeString(rawToken);
+        if (!token || !PUSH_TOKEN_RE.test(token)) {
+          throw new RequestValidationError(
+            "push_token must match ExponentPushToken[...] format or be null",
+          );
+        }
       }
+
+      const tokenValue = rawToken === null ? null : safeString(rawToken);
+
+      if (tokenValue === null) {
+        await db.query(
+          `UPDATE app_user SET device_push_token = NULL, device_push_token_updated_at = now()
+           WHERE id = $1`, [userId],
+        );
+        await ensurePreferenceRow(db, userId);
+      } else {
+        const client = await db.connect();
+        let reassigned = 0;
+        try {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              await client.query("BEGIN");
+              const cleared = await client.query(
+                `UPDATE app_user SET device_push_token = NULL, device_push_token_updated_at = now()
+                 WHERE device_push_token = $2 AND id <> $1`, [userId, tokenValue],
+              );
+              await client.query(
+                `UPDATE app_user SET device_push_token = $2, device_push_token_updated_at = now()
+                 WHERE id = $1`, [userId, tokenValue],
+              );
+              await ensurePreferenceRow(client, userId);
+              await client.query("COMMIT");
+              reassigned = cleared.rowCount;
+              break;
+            } catch (err) {
+              await client.query("ROLLBACK");
+              if (err?.code !== "23505" || attempt === 1) throw err;
+            }
+          }
+        } finally {
+          client.release();
+        }
+        req.log?.info?.({ event: "push_token.reassigned", count: reassigned, request_id });
+      }
+
+      return res.json({ ok: true });
+    } catch (err) {
+      const mapped = mapError(err);
+      return res.status(mapped.status).json({
+        ok: false,
+        request_id,
+        code: mapped.code,
+        error: mapped.message,
+      });
     }
+  };
+}
 
-    const tokenValue = rawToken === null ? null : safeString(rawToken);
-
-    await pool.query(
-      `UPDATE app_user
-       SET device_push_token = $2,
-           device_push_token_updated_at = now()
-       WHERE id = $1`,
-      [userId, tokenValue],
-    );
-
-    await ensurePreferenceRow(pool, userId);
-
-    return res.json({ ok: true });
-  } catch (err) {
-    const mapped = mapError(err);
-    return res.status(mapped.status).json({
-      ok: false,
-      request_id,
-      code: mapped.code,
-      error: mapped.message,
-    });
-  }
-});
+notificationPreferencesRouter.patch("/users/me/push-token", createPushTokenHandler());
 
 notificationPreferencesRouter.get("/users/me/notification-preferences", async (req, res) => {
   const { request_id } = req;

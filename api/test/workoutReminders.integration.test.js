@@ -3,7 +3,8 @@ import { dbAvailableOrSkip } from "./helpers/requireDb.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { withUsers, withApp, closeDb } from "../testSupport/entitlementFixtures.js";
-import { trainingProgram } from "../testSupport/trainingFixtures.js";
+import { createPushTokenHandler } from "../src/routes/notificationPreferences.js";
+import { transactionalPool, trainingProgram } from "../testSupport/trainingFixtures.js";
 import { createWorkoutRemindersHandler } from "../src/routes/workoutReminders.js";
 import { makeNotificationService } from "../src/services/notificationService.js";
 import { requireInternalToken } from "../src/middleware/auth.js";
@@ -26,7 +27,7 @@ function scopedDatabase(db, ids) {
 }
 
 async function setup(db, ids) {
-  await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC', device_push_token = 'test' WHERE id = ANY($1::uuid[])", [ids]);
+  await db.query("UPDATE app_user SET created_at = '2020-01-01', timezone = 'UTC', device_push_token = 'ExponentPushToken[' || id::text || ']' WHERE id = ANY($1::uuid[])", [ids]);
   const programs = [];
   for (const id of ids) {
     const p = await trainingProgram(db, id);
@@ -102,7 +103,7 @@ test("all notification kinds share an atomic daily reservation", async t => {
   let pushes = 0;
   t.mock.method(globalThis, "fetch", async () => { pushes++; return { json: async () => ({ data: { status: "ok" } }) }; });
   await withUsers(async (db, [user]) => {
-    await db.query("UPDATE app_user SET timezone = 'Pacific/Kiritimati', device_push_token = 'test' WHERE id = $1", [user]);
+    await db.query("UPDATE app_user SET timezone = 'Pacific/Kiritimati', device_push_token = 'ExponentPushToken[' || id::text || ']' WHERE id = $1", [user]);
     const service = makeNotificationService(db, { now });
     const results = await Promise.all([
       service.send({ userId: user, title: "PR", body: "PR", data: { event: "pr" } }),
@@ -144,4 +145,27 @@ test("users with email but no push token get no reminders or reservation", async
     assert.equal(Number((await db.query("SELECT count(*) FROM notification_preference WHERE user_id = ANY($1::uuid[])", [ids])).rows[0].count), 0);
   });
 
+});
+
+test("a formerly shared token receives one reminder for its current owner only", async t => {
+  if (!await dbAvailableOrSkip(t,requiredDbPool)) return;
+  const messages=[];
+  t.mock.method(globalThis,"fetch",async(_url,options)=>{messages.push(JSON.parse(options.body));return {json:async()=>({data:{status:"ok"}})};});
+  await withUsers(async(db,ids)=>{
+    await setup(db,ids);
+    const shared=`ExponentPushToken[shared-${ids[0]}]`;
+    const register=createPushTokenHandler(transactionalPool(db));
+    for(const user_id of ids){
+      const response=res();await register({auth:{user_id},body:{push_token:shared}},response);
+      assert.equal(response.statusCode,200);assert.deepEqual(response.body,{ok:true});
+    }
+    assert.equal((await db.query("SELECT device_push_token FROM app_user WHERE id=$1",[ids[0]])).rows[0].device_push_token,null);
+    const response=res();
+    await createWorkoutRemindersHandler(scopedDatabase(db,ids),makeNotificationService(db,{now}),{now})({},response);
+    assert.equal(response.body.sent,1);assert.equal(response.body.pace_sent,1);
+    assert.equal(messages.length,1);assert.equal(messages[0].to,shared);
+    assert.deepEqual(messages[0].data,{event:"pace_nudge"});
+    const reserved=(await db.query("SELECT user_id FROM notification_preference WHERE user_id=ANY($1::uuid[]) AND last_reminder_sent_date IS NOT NULL",[ids])).rows;
+    assert.deepEqual(reserved.map(row=>row.user_id),[ids[1]]);
+  });
 });
