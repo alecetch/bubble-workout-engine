@@ -51,6 +51,7 @@ type Exercise = Segment["exercises"][number];
 type SegmentCardProps = {
   segment: Segment;
   isLogged: boolean;
+  serverDayComplete?: boolean;
   exerciseSetCounts?: Record<string, number>;
   programId: string;
   programDayId: string;
@@ -126,6 +127,7 @@ function formatExerciseSummary(
 export const SegmentCard = React.memo(function SegmentCard({
   segment,
   isLogged,
+  serverDayComplete = false,
   exerciseSetCounts,
   programId,
   programDayId,
@@ -256,6 +258,8 @@ export const SegmentCard = React.memo(function SegmentCard({
   const { completedExerciseIds, setCompletedExerciseIds } = useLocalExerciseCompletion(
     loggableExercises,
     programDayId,
+    { serverDayComplete, serverRows: existingLogsQuery.data,
+      prescribedSets: isRoundBased ? totalRounds : undefined, onReconciled: onExerciseCompleteChange },
   );
   const allExercisesMarkedComplete =
     loggableExercises.length > 0 &&

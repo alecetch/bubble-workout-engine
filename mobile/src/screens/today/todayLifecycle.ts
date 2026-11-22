@@ -9,6 +9,19 @@ export type TodayLifecycleState =
   | "today_rest"
   | "program_complete";
 
+/** Server completion can promote local status, but a stale server read cannot undo it. */
+export function mergeDayStatuses(
+  local: Record<string, ProgramDayStatus>,
+  calendarDays: Array<{ programDayId?: string | null; status?: string | null }>,
+): Record<string, ProgramDayStatus> {
+  const merged = { ...local };
+  for (const day of calendarDays) {
+    if (!day.programDayId) continue;
+    merged[day.programDayId] = day.status === "complete" ? "complete" : merged[day.programDayId] ?? "scheduled";
+  }
+  return merged;
+}
+
 export function computeLifecycleState(params: {
   resolvedProgramId: string | null;
   calendarDays: Array<{

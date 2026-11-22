@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLifecycleState } from "./todayLifecycle";
+import { mergeDayStatuses, computeLifecycleState } from "./todayLifecycle";
 import type { ProgramDayStatus } from "../../components/program/CalendarDayPillRow";
 const day = (date: string, id = "day") => ({ calendarDate: date, programDayId: id, isTrainingDay: true });
 const state = (calendarDays: ReturnType<typeof day>[], statuses: Record<string, ProgramDayStatus> = {}, todayIso = "2026-05-01") => computeLifecycleState({ resolvedProgramId: "program", calendarDays, dayStatusByProgramDayId: statuses, todayIso });
@@ -33,3 +33,10 @@ describe("Today block lifecycle", () => {
     expect(computeLifecycleState({ resolvedProgramId: null, calendarDays: [day("2026-04-01")], dayStatusByProgramDayId: {}, todayIso: "2026-05-01" })).toBe("no_program");
   });
 });
+
+for (const [local,server,expected] of [["scheduled","complete","complete"],["complete","scheduled","complete"],["started","scheduled","started"]] as const)
+ it(`reconciles local ${local} with server ${server}`,()=>{
+   const calendar=[{...day("2026-05-01"),status:server}];const original={day:local};
+   const merged=mergeDayStatuses(original,calendar);expect(merged.day).toBe(expected);expect(original.day).toBe(local);
+   expect(state(calendar,merged)).toBe(expected === "complete" ? "today_complete" : "today_started");
+ });
