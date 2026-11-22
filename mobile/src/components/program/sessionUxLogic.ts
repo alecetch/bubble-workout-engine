@@ -279,3 +279,13 @@ export function weightLooksUnusual(enteredKg: number, referenceKg?: number | nul
   }
   return null;
 }
+
+/** Pending phone edits replace server rows for the same exercise/set. All weights remain kg. */
+export function mergeSessionLogRows(
+  serverRows: SaveSegmentLogPayload["rows"],
+  outboxRows: SaveSegmentLogPayload["rows"],
+): SaveSegmentLogPayload["rows"] {
+  const rows = new Map(serverRows.map(row => [JSON.stringify([row.programExerciseId, row.orderIndex]), row]));
+  for (const row of outboxRows) rows.set(JSON.stringify([row.programExerciseId, row.orderIndex]), row);
+  return [...rows.values()];
+}

@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import type { QueryClient } from "@tanstack/react-query";
+import { CompletionWaitTimeout, showOfflineCompletionAlert, withCompletionTimeout } from "../../../utils/dayCompletionSafety";
+import { useCallback, useRef, useState } from "react";
+import { onlineManager, type QueryClient } from "@tanstack/react-query";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { queryKeys, useCompleteProgram, useMarkDayComplete } from "../../../api/hooks";
 import { getPrsFeed } from "../../../api/history";
@@ -80,6 +81,7 @@ export function useDayCompletionFlow(params: {
     computeSessionStats,
     day,
   } = params;
+  const completionInFlight = useRef(false);
   const [prHits, setPrHits] = useState<string[]>([]);
   const [prE1rmKg, setPrE1rmKg] = useState<number | null>(null);
 
@@ -103,10 +105,29 @@ export function useDayCompletionFlow(params: {
   );
 
   const handleSummaryDismiss = useCallback(async (): Promise<void> => {
-    if (markDayComplete.isPending) return;
+    if (!onlineManager.isOnline()) {
+      setSummaryVisible(false);
+      showOfflineCompletionAlert();
+      return;
+    }
+    if (completionInFlight.current || (markDayComplete.isPending && !markDayComplete.isPaused)) return;
     setSummaryVisible(false);
+    completionInFlight.current = true;
+    const variables = { programDayId, isCompleted: true, userId, ...(localDate ? { localDate } : {}) };
     try {
-      const completion = await markDayComplete.mutateAsync({ programDayId, isCompleted: true, userId, ...(localDate ? { localDate } : {}) });
+      let completion;
+      try {
+        completion = await withCompletionTimeout(markDayComplete.mutateAsync(variables), 15_000);
+      } catch (error) {
+        if (error instanceof CompletionWaitTimeout) {
+          const cache = queryClient.getMutationCache?.();
+          for (const mutation of cache?.getAll() ?? []) {
+            if (mutation.state.variables === variables && mutation.state.isPaused) cache!.remove(mutation);
+          }
+          markDayComplete.reset?.();
+        }
+        throw error;
+      }
       // Confirmed sets may have earned the milestone before the completion request.
       const milestone = highestMilestone([...(completion?.year_progress?.new_milestones ?? []),
         ...(completion?.year_progress?.unseen_milestones ?? [])]);
@@ -205,7 +226,7 @@ export function useDayCompletionFlow(params: {
       (nav.getParent() as any)?.navigate("TodayTab" as never);
     } catch (error) {
       setConfirmationText(error instanceof Error ? error.message : "Unable to mark workout complete.");
-    }
+    } finally { completionInFlight.current = false; }
   }, [
     localDate,
     completeProgram,
