@@ -30,7 +30,7 @@ test("training reminders combine pace and daily copy in one send", async () => {
   assert.equal("emailText" in f.messages[0], false);
   assert.equal("emailSubject" in f.messages[0], false);
   assert.equal(f.messages[0].body, "Your Pull session is ready. Today could be day 51.");
-  assert.match(f.messages[0].title, /behind pace/);
+  assert.equal(f.messages[0].title, "Every session counts");
   assert.equal(f.messages[0].isPaceMessage, true);
   assert.equal(f.messages[0].isReminder, true);
   assert.deepEqual(f.messages[0].data, { event: "reminder", programDayId: "day" });
@@ -127,4 +127,26 @@ test("candidate queries select push only and widen dates around server day", asy
     assert.match(sql, /au.device_push_token IS NOT NULL/); assert.doesNotMatch(sql, /OR au.email/);
     assert.match(sql, /BETWEEN CURRENT_DATE - 1 AND CURRENT_DATE \+ 1/);
   }
+});
+
+for (const trainingDay of [false, true]) test(`${trainingDay ? "workout" : "rest"}-day user 100 behind receives distinct forgiving copy`, async () => {
+  // 1 July expects 100 training days in the full-year 200-day window.
+  const candidate = user("a", { day_label: "Pull", program_day_id: "day" });
+  const f = fixture({ [trainingDay ? "training" : "rest"]: [candidate], counts: [{ user_id: "a", count: 0 }] });
+  const response = await f.run();
+  assert.equal(response.body.sent, 1); assert.equal(response.body.pace_sent, 1);
+  assert.equal(f.messages.length, 1);
+  const message = f.messages[0];
+  assert.equal(message.title, "Every session counts");
+  assert.equal(message.body, trainingDay ? "Your Pull session is ready. Today could be day 1." : "Today could be day 1 of your year.");
+  assert.notEqual(message.title, message.body); assert.doesNotMatch(message.body, /behind|100/);
+  assert.equal(message.isPaceMessage, true);
+  assert.deepEqual(message.data, trainingDay ? { event: "reminder", programDayId: "day" } : { event: "pace_nudge" });
+});
+test("rest-day user three behind retains the week catch-up sentence", async () => {
+  const f = fixture({ rest: [user("a")], counts: [{ user_id: "a", count: 97 }] });
+  assert.equal((await f.run()).body.sent, 1); assert.equal(f.messages.length, 1);
+  assert.equal(f.messages[0].title, "Catch up this week");
+  assert.equal(f.messages[0].body, "You're 3 behind pace. Three extra sessions this week and you're back.");
+  assert.deepEqual(f.messages[0].data, { event: "pace_nudge" });
 });
