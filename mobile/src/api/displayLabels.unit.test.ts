@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { authGetJson } from "./client";
 import { getProgramDayFull, getProgramOverview } from "./programViewer";
 import { getProgramCompletionSummary } from "./programCompletion";
-import { fetchActivePrograms, fetchCombinedCalendar, fetchSessionsByDate } from "./activePrograms";
+import { fetchActivePrograms } from "./activePrograms";
 import { useSplitRecommendation } from "./hooks/programHooks";
 import { useQuery } from "@tanstack/react-query";
 
@@ -32,7 +32,7 @@ it("falls back to semantic labels for older overview and day responses", async (
   expect(day.focusLabel).toBe("Full Body");
 });
 
-it.each([true, false])("normalizes labels across active programs, sessions and calendars (API label present: %s)", async hasLabel => {
+it.each([true, false])("normalizes labels across active programs and today sessions (API label present: %s)", async hasLabel => {
   const row = { program_type: "hyrox", ...(hasLabel ? { program_type_label: "API HYROX" } : {}) };
   const expected = hasLabel ? "API HYROX" : "HYROX";
   getJson.mockResolvedValueOnce({ programs: [row], today_sessions: [row] });
@@ -40,10 +40,7 @@ it.each([true, false])("normalizes labels across active programs, sessions and c
   expect(active.programs[0].programTypeLabel).toBe(expected);
   expect(active.programs[0].program_type).toBe("hyrox");
   expect(active.today_sessions[0].programTypeLabel).toBe(expected);
-  getJson.mockResolvedValueOnce({ days: [{ sessions: [row] }] });
-  expect((await fetchCombinedCalendar()).days[0].sessions[0].programTypeLabel).toBe(expected);
-  getJson.mockResolvedValueOnce({ sessions: [row] });
-  expect((await fetchSessionsByDate("2026-10-13")).sessions[0].programTypeLabel).toBe(expected);
+
 });
 
 it.each([true, false])("normalizes completion labels (API label present: %s)", async hasLabel => {

@@ -5,7 +5,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramDashboardScreen } from "./ProgramDashboardScreen";
-import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
+import { useActivePrograms, useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import { getProgramOverview } from "../../api/programViewer";
 import { claimYearMilestone, markYearMilestoneSeen } from "../../api/yearProgress";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
@@ -39,6 +39,7 @@ vi.mock("@react-navigation/native", async () => {
 });
 
 vi.mock("../../api/hooks", () => ({
+  useActivePrograms: vi.fn(),
   useDayPreview: vi.fn(),
   useProgramEndCheck: vi.fn(),
   useProgramOverview: vi.fn(),
@@ -140,6 +141,7 @@ describe("ProgramDashboardScreen", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
     setActiveProgramIdMock.mockReset();
+    vi.mocked(useActivePrograms).mockReturnValue({ data: { primary_program_id: null }, isLoading: false, isError: false, refetch: vi.fn() } as any);
     getProgramOverviewMock.mockReset();
     mockZustandSelector(useSessionStoreMock as any, {
       userId: "user-1",
@@ -241,17 +243,42 @@ describe("ProgramDashboardScreen", () => {
     expect(setActiveProgramIdMock).not.toHaveBeenCalled();
   });
 
-  it("renders the missing program guard when no route or active program id is available", () => {
-    mockZustandSelector(useSessionStoreMock as any, {
-      userId: "user-1",
-      activeProgramId: null,
-      setActiveProgramId: setActiveProgramIdMock,
-    });
-
+  it("resolves and remembers the primary program when opened at the root", () => {
+    vi.mocked(useActivePrograms).mockReturnValue({ data: { primary_program_id: "primary-prog" } } as any);
     renderDashboard(undefined, {});
+    expect(useProgramOverviewMock).toHaveBeenCalledWith("primary-prog", { userId: "user-1" });
+    expect(screen.getByText("Strength Block")).toBeInTheDocument();
+    expect(setActiveProgramIdMock).toHaveBeenCalledWith("primary-prog");
+  });
 
-    expect(screen.getByText("Missing program")).toBeInTheDocument();
-    expect(screen.getByText("No program id was provided for this dashboard view.")).toBeInTheDocument();
+  it("shows a friendly empty state and opens program review on Home", () => {
+    const parentNavigate = vi.fn();
+    renderDashboard({ navigate: vi.fn(), getParent: vi.fn(() => ({ navigate: parentNavigate })) } as any, {});
+    expect(screen.getByText("No Active Program")).toBeInTheDocument();
+    expect(screen.getByText("Generate a program to unlock your Today workout.")).toBeInTheDocument();
+    expect(screen.queryByText("Missing program")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No program id was provided/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Go To Program Review"));
+    expect(parentNavigate).toHaveBeenCalledWith("HomeTab", { screen: "ProgramReview" });
+  });
+
+  it("retries a failed primary-program lookup", () => {
+    const refetch = vi.fn();
+    vi.mocked(useActivePrograms).mockReturnValue({ isError: true, error: new Error("Offline"), refetch } as any);
+    renderDashboard(undefined, {});
+    expect(screen.getByText("Unable to load dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Offline")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Retry"));
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(screen.queryByText("No Active Program")).not.toBeInTheDocument();
+  });
+
+  it("shows the skeleton while resolving the primary program", () => {
+    vi.mocked(useActivePrograms).mockReturnValue({ isLoading: true } as any);
+    renderDashboard(undefined, {});
+    expect(screen.queryByText("No Active Program")).not.toBeInTheDocument();
+    expect(screen.queryByText("Retry")).not.toBeInTheDocument();
+    expect(screen.queryByText("Strength Block")).not.toBeInTheDocument();
   });
 
   it("shows the review prompt when route.params.showReviewPrompt is true", () => {
@@ -478,6 +505,7 @@ describe("ProgramDashboardScreen - React Query integration", () => {
     vi.useRealTimers();
     overviewStaleTime = 5 * 60 * 1000;
     setActiveProgramIdMock.mockReset();
+    vi.mocked(useActivePrograms).mockReturnValue({ data: { primary_program_id: null }, isLoading: false, isError: false, refetch: vi.fn() } as any);
     getProgramOverviewMock.mockReset();
     mockZustandSelector(useSessionStoreMock as any, {
       userId: "user-1",

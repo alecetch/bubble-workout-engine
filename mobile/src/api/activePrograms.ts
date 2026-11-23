@@ -1,5 +1,5 @@
 import { displayLabel } from "../utils/displayLabel";
-import { authGetJson, authPatchJson } from "./client";
+import { authGetJson } from "./client";
 
 export interface ActiveProgramSummary {
   program_id: string;
@@ -31,45 +31,6 @@ export interface ActiveProgramsResponse {
   primary_program_id: string | null;
   programs: ActiveProgramSummary[];
   today_sessions: TodaySession[];
-}
-
-export interface CalendarSession {
-  program_id: string;
-  program_day_id: string;
-  program_type: string;
-  programTypeLabel: string;
-  program_title: string;
-  is_primary_program: boolean;
-  day_label: string;
-  is_completed: boolean;
-}
-
-export interface CalendarDay {
-  scheduled_date: string;
-  sessions: CalendarSession[];
-}
-
-export interface CombinedCalendarResponse {
-  ok: boolean;
-  days: CalendarDay[];
-}
-
-export interface SessionsByDateItem {
-  program_id: string;
-  program_day_id: string;
-  program_title: string;
-  program_type: string;
-  programTypeLabel: string;
-  is_primary_program: boolean;
-  day_label: string;
-  session_duration_mins: number | null;
-  is_completed: boolean;
-}
-
-export interface SessionsByDateResponse {
-  ok: boolean;
-  scheduled_date: string;
-  sessions: SessionsByDateItem[];
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -134,79 +95,7 @@ function normalizeActivePrograms(raw: unknown): ActiveProgramsResponse {
   };
 }
 
-function normalizeCombinedCalendar(raw: unknown): CombinedCalendarResponse {
-  const root = asObject(raw);
-  return {
-    ok: asBoolean(root.ok, true),
-    days: asArray(root.days).map((item) => {
-      const row = asObject(item);
-      return {
-        scheduled_date: asString(row.scheduled_date),
-        sessions: asArray(row.sessions).map((session) => {
-          const value = asObject(session);
-          return {
-            program_id: asString(value.program_id),
-            program_day_id: asString(value.program_day_id),
-            program_type: asString(value.program_type),
-            programTypeLabel: asNullableString(value.program_type_label ?? value.programTypeLabel) ??
-              displayLabel("programType", asString(value.program_type)),
-            program_title: asString(value.program_title),
-            is_primary_program: asBoolean(value.is_primary_program),
-            day_label: asString(value.day_label),
-            is_completed: asBoolean(value.is_completed),
-          };
-        }),
-      };
-    }),
-  };
-}
-
-function normalizeSessionsByDate(raw: unknown): SessionsByDateResponse {
-  const root = asObject(raw);
-  return {
-    ok: asBoolean(root.ok, true),
-    scheduled_date: asString(root.scheduled_date),
-    sessions: asArray(root.sessions).map((item) => {
-      const row = asObject(item);
-      return {
-        program_id: asString(row.program_id),
-        program_day_id: asString(row.program_day_id),
-        program_title: asString(row.program_title),
-        program_type: asString(row.program_type),
-        programTypeLabel: asNullableString(row.program_type_label ?? row.programTypeLabel) ?? displayLabel("programType", asString(row.program_type)),
-        is_primary_program: asBoolean(row.is_primary_program),
-        day_label: asString(row.day_label),
-        session_duration_mins: row.session_duration_mins == null ? null : asNumber(row.session_duration_mins),
-        is_completed: asBoolean(row.is_completed),
-      };
-    }),
-  };
-}
-
 export async function fetchActivePrograms(): Promise<ActiveProgramsResponse> {
   const raw = await authGetJson<unknown>("/api/programs/active");
   return normalizeActivePrograms(raw);
-}
-
-export async function fetchCombinedCalendar(from?: string, to?: string): Promise<CombinedCalendarResponse> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const qs = params.toString() ? `?${params.toString()}` : "";
-  const raw = await authGetJson<unknown>(`/api/calendar/combined${qs}`);
-  return normalizeCombinedCalendar(raw);
-}
-
-export async function fetchSessionsByDate(scheduledDate: string): Promise<SessionsByDateResponse> {
-  const raw = await authGetJson<unknown>(`/api/sessions/by-date/${scheduledDate}`);
-  return normalizeSessionsByDate(raw);
-}
-
-export async function setPrimaryProgram(
-  programId: string,
-): Promise<{ ok: boolean; primary_program_id: string }> {
-  return authPatchJson<{ ok: boolean; primary_program_id: string }, Record<string, never>>(
-    `/api/program/${programId}/primary`,
-    {},
-  );
 }

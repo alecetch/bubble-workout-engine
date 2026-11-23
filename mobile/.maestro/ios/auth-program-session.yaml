@@ -28,10 +28,10 @@ appId: fit.get200days.app
 - assertNotVisible: "Program Review"
 - tapOn: "Programs"
 - extendedWaitUntil:
-    visible: "Active Programs"
+    visible:
+      id: "program-dashboard"
     timeout: 30000
 - assertVisible: ${EXPECTED_PROGRAM}
-- tapOn: ${EXPECTED_PROGRAM}
 - scrollUntilVisible:
     element:
       text: "Start workout"
@@ -49,6 +49,7 @@ appId: fit.get200days.app
 - assertNotVisible: "Sign in"
 - tapOn: "Programs"
 - extendedWaitUntil:
-    visible: "Active Programs"
+    visible:
+      id: "program-dashboard"
     timeout: 30000
 - assertVisible: ${EXPECTED_PROGRAM}

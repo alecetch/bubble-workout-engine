@@ -22,9 +22,6 @@ vi.mock("../../me", () => ({
 
 vi.mock("../../activePrograms", () => ({
   fetchActivePrograms: vi.fn(),
-  fetchCombinedCalendar: vi.fn(),
-  fetchSessionsByDate: vi.fn(),
-  setPrimaryProgram: vi.fn(),
 }));
 
 vi.mock("../../programViewer", () => ({
@@ -121,9 +118,6 @@ describe("api/hooks barrel", () => {
       "useProgramCompletionSummary",
       "useProgramEndCheck",
       "useActivePrograms",
-      "useCombinedCalendar",
-      "useSessionsByDate",
-      "useSetPrimaryProgram",
       "useRegenerateDays",
       "useMarkDayComplete",
       "useCompleteProgram",
