@@ -1,3 +1,6 @@
+import { useWeightUnit } from "../../api/hooks/useWeightUnit";
+import { formatVolume } from "../../utils/trainingWeight";
+import { flush } from "../../sync/setLogOutboxSender";
 import * as setOutbox from "../../sync/setLogOutbox";
 import { entry as queuedEntry } from "../../sync/outboxTestFixture";
 import { toLocalIsoDate } from "../../utils/localDate";
@@ -5,7 +8,7 @@ import { summaryCountCopy } from "../../utils/yearCopy";
 import React from "react";
 import { axe } from "jest-axe";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import type { QueryClient } from "@tanstack/react-query";
+import { onlineManager, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Alert } from "react-native";
 import { ProgramDayScreen } from "./ProgramDayScreen";
@@ -32,6 +35,7 @@ import {
 } from "../../__test-utils__";
 
 vi.unmock("@tanstack/react-query");
+vi.mock("../../sync/setLogOutboxSender", () => ({ flush: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("../../components/program/HeroHeader", () => ({
   HeroHeader: (props: any) => (
@@ -203,19 +207,21 @@ vi.mock("./hooks/useExerciseSwapSheet", () => ({
 }));
 
 vi.mock("../../components/program/SessionSummaryModal", () => ({
-  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, yearClubs, year, totalSets, totalVolumeKg, exerciseCount, visible }: any) =>
-    visible ? (
+  SessionSummaryModal: ({ onDismiss, yearCountAfterSession, yearTarget, yearClubs, year, totalSets, totalVolumeKg, exerciseCount, visible, isSubmitting }: any) => {
+    const unit = useWeightUnit();
+    return visible ? (
       <div role="dialog" aria-label="Session summary">
         <p>Great work</p>
         {yearCountAfterSession !== null ? <p>{summaryCountCopy(yearCountAfterSession, yearTarget, year, yearClubs)}</p> : null}
         <p>{totalSets ?? "–"} sets</p>
-        <p>{totalVolumeKg ?? "–"} kg</p>
+        <p>{unit === "lbs" && totalVolumeKg != null ? formatVolume(totalVolumeKg, unit) : `${totalVolumeKg ?? "\u2013"} kg`}</p>
         <p>{exerciseCount ?? "–"} exercises</p>
-        <button type="button" onClick={() => onDismiss?.()}>
+        <button type="button" disabled={isSubmitting} onClick={() => onDismiss?.()}>
           Finish
         </button>
       </div>
-    ) : null,
+    ) : null;
+  },
 }));
 
 const useProgramDayFullMock = vi.mocked(useProgramDayFull);
@@ -327,6 +333,8 @@ async function openWorkoutSummary() {
 
 describe("ProgramDayScreen", () => {
   beforeEach(() => {
+    onlineManager.setOnline(true);
+    vi.mocked(flush).mockReset().mockResolvedValue(undefined);
     vi.mocked(getSegmentExerciseLogs).mockReset().mockResolvedValue([]);
     markDayMutateMock.mockReset();
     markDayMutateMock.mockResolvedValue({ ok: true });
@@ -1005,4 +1013,49 @@ describe("ProgramDayScreen", () => {
     expect(alertSpy).not.toHaveBeenCalled();
     expect(await screen.findByRole("dialog", { name: "Session summary" })).toBeInTheDocument();
   });
+  it("offline finish shows the saved-on-phone alert and never opens the summary",async()=>{
+    renderScreen();await waitForLocalStateLoad();onlineManager.setOnline(false);
+    try{await openWorkoutSummary();
+      expect(alertSpy).toHaveBeenCalledWith("You're offline",expect.stringContaining("Your sets are saved on this phone."),[{text:"OK"}]);
+      expect(screen.queryByRole("dialog",{name:"Session summary"})).not.toBeInTheDocument();
+      expect(markDayMutateMock).not.toHaveBeenCalled();expect(flush).not.toHaveBeenCalled();
+    }finally{onlineManager.setOnline(true);}
+  });
+  for (const mode of ["empty", "paused", "failure"] as const) it(`summary includes queued pound volume with ${mode} server stats`,async()=>{
+    vi.mocked(useWeightUnit).mockReturnValue("lbs");
+    await setOutbox.clear("user-1");
+    await setOutbox.enqueue("user-1",[1,2].map(orderIndex=>queuedEntry({programDayId:"day-1",workoutSegmentId:"seg-1",key:`day-1:seg-1:ex-1:${orderIndex}`,row:{programExerciseId:"ex-1",orderIndex,weightKg:50,repsCompleted:5,rirActual:null}})));
+    let restore: (() => void) | undefined;
+    try{renderScreen();await waitForLocalStateLoad();
+      if(mode === "failure") { queryClient.setDefaultOptions({queries:{retry:false}});vi.mocked(getSegmentExerciseLogs).mockRejectedValue(new Error("offline")); }
+      if(mode === "paused") {
+        const original=queryClient.getQueryState.bind(queryClient);
+        const spy=vi.spyOn(queryClient,"getQueryState").mockImplementation((key:any)=>key[0] === "segmentExerciseLogs" ? {fetchStatus:"paused"} as any : original(key));
+        restore=()=>spy.mockRestore();
+      }
+      await openWorkoutSummary();
+      const warning=alertSpy.mock.calls.find(call=>call[0]==="Some sets haven't saved");
+      if(warning)act(()=>warning[2]?.find(button=>button.text==="Finish anyway")?.onPress?.());
+      expect(await screen.findByText("1,102 lb")).toBeInTheDocument();expect(screen.getByText("2 sets")).toBeInTheDocument();
+      expect(flush).toHaveBeenCalledWith("user-1");
+    }finally{restore?.();await setOutbox.clear("user-1");}
+  });
+  it("Done remains enabled for a paused completion mutation",async()=>{
+    useMarkDayCompleteMock.mockReturnValue({mutateAsync:markDayMutateMock,isPending:true,isPaused:true} as any);
+    renderScreen();await openWorkoutSummary();expect(await screen.findByRole("button",{name:"Finish"})).toBeEnabled();
+  });
+
+  it("a stalled outbox flush waits at most five seconds before loading stats",async()=>{
+    vi.mocked(flush).mockReturnValue(new Promise(()=>{}));
+    getSegmentLogMock.mockResolvedValue({updatedAt:"2026-11-15",exerciseSetCounts:{"ex-1":1}});
+    vi.mocked(getSegmentExerciseLogs).mockResolvedValue([{programExerciseId:"ex-1",orderIndex:1,weightKg:20,repsCompleted:5,rirActual:null}]);
+    renderScreen();await waitForLocalStateLoad();await waitFor(()=>expect(screen.getByTestId("workout-complete-ready")).toBeInTheDocument());
+    vi.useFakeTimers();
+    try{await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Workout complete"}));});
+      expect(flush).toHaveBeenCalled();expect(getSegmentExerciseLogs).not.toHaveBeenCalled();
+      await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});
+      expect(getSegmentExerciseLogs).toHaveBeenCalled();expect(screen.getByText("200 kg")).toBeInTheDocument();
+    }finally{vi.useRealTimers();}
+  });
+
 });
