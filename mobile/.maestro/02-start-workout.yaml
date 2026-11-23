@@ -27,9 +27,9 @@ appId: fit.get200days.app
     timeout: 30000
 - tapOn: "Programs"
 - extendedWaitUntil:
-    visible: "Active Programs"
+    visible:
+      id: "program-dashboard"
     timeout: 30000
-- tapOn: "Strength Block"
 - runFlow:
     when:
       visible: "Start workout"

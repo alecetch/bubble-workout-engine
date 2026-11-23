@@ -12,10 +12,9 @@ import {
   useActivePrograms,
   useProgramDayFull,
   useProgramOverview,
-  useSetPrimaryProgram,
   useUpdateNotificationPreferences,
 } from "./hooks";
-import { fetchActivePrograms, setPrimaryProgram } from "./activePrograms";
+import { fetchActivePrograms } from "./activePrograms";
 import { updateNotificationPreferences } from "./notifications";
 import { getProgramDayFull, getProgramOverview } from "./programViewer";
 
@@ -31,9 +30,6 @@ vi.mock("./programViewer", () => ({
 
 vi.mock("./activePrograms", () => ({
   fetchActivePrograms: vi.fn(),
-  fetchCombinedCalendar: vi.fn(),
-  fetchSessionsByDate: vi.fn(),
-  setPrimaryProgram: vi.fn(),
 }));
 
 vi.mock("./notifications", () => ({
@@ -44,7 +40,6 @@ vi.mock("./notifications", () => ({
 const getProgramOverviewMock = vi.mocked(getProgramOverview);
 const getProgramDayFullMock = vi.mocked(getProgramDayFull);
 const fetchActiveProgramsMock = vi.mocked(fetchActivePrograms);
-const setPrimaryProgramMock = vi.mocked(setPrimaryProgram);
 const updateNotificationPreferencesMock = vi.mocked(updateNotificationPreferences);
 
 const programOverviewFixture = {
@@ -93,8 +88,6 @@ describe("api hooks", () => {
     getProgramDayFullMock.mockResolvedValue({ day: { id: "day-1" }, segments: [] } as any);
     fetchActiveProgramsMock.mockReset();
     fetchActiveProgramsMock.mockResolvedValue(activeProgramsFixture);
-    setPrimaryProgramMock.mockReset();
-    setPrimaryProgramMock.mockResolvedValue({ ok: true, primary_program_id: "prog-2" });
     updateNotificationPreferencesMock.mockReset();
     updateNotificationPreferencesMock.mockResolvedValue(notificationPreferencesFixture);
   });
@@ -213,18 +206,6 @@ describe("api hooks", () => {
   });
 
   describe("mutation cache invalidation", () => {
-    it("useSetPrimaryProgram invalidates activePrograms on success", async () => {
-      const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
-      const { result } = renderHook(() => useSetPrimaryProgram(), {
-        wrapper: makeWrapper(queryClient),
-      });
-
-      await result.current.mutateAsync("prog-2");
-
-      expect(setPrimaryProgramMock).toHaveBeenCalledTimes(1);
-      expect(setPrimaryProgramMock.mock.calls[0][0]).toBe("prog-2");
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.activePrograms });
-    });
 
     it("useUpdateNotificationPreferences rolls back optimistic update on error", async () => {
       queryClient.setQueryData(queryKeys.notificationPreferences, notificationPreferencesFixture);

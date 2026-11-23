@@ -28,6 +28,6 @@ it("honors persisted dismissal and rejects unsafe nested routes", async () => {
  const { maybeShowSoftUpdate, isSoftPromptRoute } = await import("./versionGatePresentation");
  storage.getItem.mockResolvedValue("20"); const show = vi.fn();
  expect(await maybeShowSoftUpdate({ state: "soft_update", latestBuild: 20, updateUrl: "https://store.test" }, { getRoute: () => ({ name: "Settings", tab: "SettingsTab" }), show, openUrl: vi.fn() })).toBe(false);
- for (const [tab, name] of [["HomeTab", "ProgramDashboard"], ["ProgramsTab", "ProgramHub"], ["TodayTab", "TodayTab"], ["HistoryTab", "HistoryMain"], ["SettingsTab", "Settings"]]) expect(isSoftPromptRoute({ tab, name })).toBe(true);
- expect(isSoftPromptRoute({ tab: "ProgramsTab", name: "ProgramDashboard" })).toBe(false); expect(show).not.toHaveBeenCalled();
+ for (const [tab, name] of [["HomeTab", "ProgramDashboard"], ["ProgramsTab", "ProgramDashboard"], ["TodayTab", "TodayTab"], ["HistoryTab", "HistoryMain"], ["SettingsTab", "Settings"]]) expect(isSoftPromptRoute({ tab, name })).toBe(true);
+ expect(isSoftPromptRoute({ tab: "ProgramsTab", name: "ProgramDay" })).toBe(false); expect(show).not.toHaveBeenCalled();
 });

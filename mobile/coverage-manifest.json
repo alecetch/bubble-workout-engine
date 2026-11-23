@@ -278,16 +278,6 @@
     },
     {
       "type": "component",
-      "source": "src/components/program/CombinedCalendar.tsx",
-      "test": "src/components/program/CombinedCalendar.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "component",
       "source": "src/components/program/DayPreviewCard.tsx",
       "test": "src/components/program/DayPreviewCard.component.test.tsx",
       "status": "covered",
@@ -421,16 +411,6 @@
       "type": "component",
       "source": "src/components/program/segmentCard/RoundSummaryRow.tsx",
       "test": "src/components/program/segmentCard/RoundSummaryRow.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "component",
-      "source": "src/components/program/SessionPickerSheet.tsx",
-      "test": "src/components/program/SessionPickerSheet.component.test.tsx",
       "status": "covered",
       "tags": [
         "program"
@@ -894,16 +874,6 @@
       "type": "screen",
       "source": "src/screens/program/ProgramEndCheckScreen.tsx",
       "test": "src/screens/program/ProgramEndCheckScreen.component.test.tsx",
-      "status": "covered",
-      "tags": [
-        "program"
-      ],
-      "reason": ""
-    },
-    {
-      "type": "screen",
-      "source": "src/screens/program/ProgramHubScreen.tsx",
-      "test": "src/screens/program/ProgramHubScreen.component.test.tsx",
       "status": "covered",
       "tags": [
         "program"

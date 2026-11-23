@@ -13,7 +13,7 @@ export function isStartupReady(gate: VersionGateState["state"], restoration: str
 }
 export function isSoftPromptRoute(route: { name?: string; tab?: string }) {
   const roots: Record<string, string[]> = {
-    HomeTab: ["ProgramDashboard", "ProgramReview"], ProgramsTab: ["ProgramHub"],
+    HomeTab: ["ProgramDashboard", "ProgramReview"], ProgramsTab: ["ProgramDashboard"],
     TodayTab: ["TodayTab"], HistoryTab: ["HistoryMain"], SettingsTab: ["Settings"],
   };
   return Boolean(route.tab && route.name && roots[route.tab]?.includes(route.name));

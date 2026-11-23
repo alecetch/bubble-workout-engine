@@ -16,7 +16,7 @@ import { HeroHeader } from "../../components/program/HeroHeader";
 import { WeekPillStrip, type WeekStatus } from "../../components/program/WeekPillStrip";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { WeekShareCard } from "../../components/sharing/WeekShareCard";
-import { useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
+import { useActivePrograms, useDayPreview, useProgramEndCheck, useProgramOverview } from "../../api/hooks";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
 import { useOnboardingStore } from "../../state/onboarding/onboardingStore";
 import { useSessionStore } from "../../state/session/sessionStore";
@@ -48,7 +48,8 @@ function shallowEqualRecord(
 export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.Element {
   const routeProgramId = route.params?.programId ?? null;
   const activeProgramId = useSessionStore((state) => state.activeProgramId);
-  const programId = routeProgramId ?? activeProgramId ?? null;
+  const activeProgramsQuery = useActivePrograms();
+  const programId = routeProgramId ?? activeProgramId ?? activeProgramsQuery.data?.primary_program_id ?? null;
   const onboardingUserId = useOnboardingStore((state) => state.userId);
   const sessionUserId = useSessionStore((state) => state.userId);
   const setActiveProgramId = useSessionStore((state) => state.setActiveProgramId);
@@ -62,10 +63,10 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
     isDismissing={milestone.isDismissing} error={milestone.error} />;
 
   useEffect(() => {
-    if (routeProgramId) {
-      setActiveProgramId(routeProgramId);
+    if (programId && programId !== activeProgramId) {
+      setActiveProgramId(programId);
     }
-  }, [routeProgramId, setActiveProgramId]);
+  }, [programId, activeProgramId, setActiveProgramId]);
 
   // ── UI state (user interactions only) ────────────────────────────────────
   //
@@ -423,17 +424,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   }, [endCheckQuery, overviewQuery, queryClient]);
 
   // ── Guards ────────────────────────────────────────────────────────────────
-  if (!programId) {
-    return (
-      <View style={styles.centered}>
-        {milestoneOverlay}
-        <Text style={styles.errorTitle}>Missing program</Text>
-        <Text style={styles.errorText}>No program id was provided for this dashboard view.</Text>
-      </View>
-    );
-  }
-
-  if (overviewQuery.isLoading) {
+  if ((!programId && activeProgramsQuery.isLoading) || (programId && overviewQuery.isLoading)) {
     return (
       <View style={styles.root}>
         {milestoneOverlay}
@@ -451,6 +442,32 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
             ))}
           </View>
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (!programId) {
+    if (activeProgramsQuery.isError) {
+      return (
+        <View style={styles.centered}>
+          {milestoneOverlay}
+          <Text style={styles.errorTitle}>Unable to load dashboard</Text>
+          <Text style={styles.errorText}>{activeProgramsQuery.error?.message ?? "Please try again."}</Text>
+          <PressableScale style={styles.retryButton} onPress={() => void activeProgramsQuery.refetch()}>
+            <Text style={styles.retryLabel}>Retry</Text>
+          </PressableScale>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.centered}>
+        {milestoneOverlay}
+        <Text style={styles.errorTitle}>No Active Program</Text>
+        <Text style={styles.errorText}>Generate a program to unlock your Today workout.</Text>
+        <PressableScale style={styles.retryButton}
+          onPress={() => navigation.getParent()?.navigate("HomeTab", { screen: "ProgramReview" })}>
+          <Text style={styles.retryLabel}>Go To Program Review</Text>
+        </PressableScale>
       </View>
     );
   }
@@ -474,7 +491,7 @@ export function ProgramDashboardScreen({ route, navigation }: Props): React.JSX.
   const showEndCheckBanner = endCheck?.canCompleteWithSkips === true;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID="program-dashboard">
       {milestoneOverlay}
       <ScrollView contentContainerStyle={styles.content}>
         <HeroHeader

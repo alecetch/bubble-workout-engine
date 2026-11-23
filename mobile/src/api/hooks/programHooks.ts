@@ -18,12 +18,7 @@ import { getEquipmentItemsForPreset, type EquipmentItemsForPresetResponse } from
 import { getMe, linkClientProfileToMe, type MeResponse } from "../me";
 import {
   fetchActivePrograms,
-  fetchCombinedCalendar,
-  fetchSessionsByDate,
-  setPrimaryProgram,
   type ActiveProgramsResponse,
-  type CombinedCalendarResponse,
-  type SessionsByDateResponse,
 } from "../activePrograms";
 import {
   getProgramDayFull,
@@ -260,40 +255,6 @@ export function useActivePrograms(): UseQueryResult<ActiveProgramsResponse> {
     queryKey: queryKeys.activePrograms,
     queryFn: fetchActivePrograms,
     staleTime: 60 * 1000,
-  });
-}
-
-export function useCombinedCalendar(from?: string, to?: string): UseQueryResult<CombinedCalendarResponse> {
-  return useQuery({
-    queryKey: [...queryKeys.combinedCalendar, from ?? null, to ?? null],
-    queryFn: () => fetchCombinedCalendar(from, to),
-    staleTime: 60 * 1000,
-  });
-}
-
-export function useSessionsByDate(
-  scheduledDate: string | null,
-): UseQueryResult<SessionsByDateResponse> {
-  return useQuery({
-    queryKey: ["sessionsByDate", scheduledDate ?? null],
-    queryFn: () => fetchSessionsByDate(scheduledDate as string),
-    enabled: Boolean(scheduledDate),
-    staleTime: 60 * 1000,
-  });
-}
-
-export function useSetPrimaryProgram(): UseMutationResult<
-  { ok: boolean; primary_program_id: string },
-  Error,
-  string
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: setPrimaryProgram,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.activePrograms });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.combinedCalendar });
-    },
   });
 }
 

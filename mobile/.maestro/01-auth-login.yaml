@@ -116,6 +116,7 @@ appId: fit.get200days.app
           timeout: 20000
 - tapOn: "Programs"
 - extendedWaitUntil:
-    visible: "Active Programs"
+    visible:
+      id: "program-dashboard"
     timeout: 20000
 - assertVisible: "Strength Block"

@@ -1,13 +1,11 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { ProgramHubScreen } from "../screens/program/ProgramHubScreen";
 import { PaywallScreen } from "../screens/paywall/PaywallScreen";
 import type { ExerciseDetailParams } from "../screens/program/ExerciseDetailScreen";
 import { logger } from "../utils/logger";
 import type { MilestoneMoment } from "../api/yearProgress";
 
 export type ProgramsStackParamList = {
-  ProgramHub: undefined;
   ProgramDashboard: {
     yearMilestone?: MilestoneMoment;
     completionDestination?: "ProgramComplete" | "ProgramEndCheck";
@@ -87,12 +85,11 @@ function ExerciseDetailScreenDeferred(
 export function ProgramsStackNavigator(): React.JSX.Element {
   return (
     <Stack.Navigator
-      initialRouteName="ProgramHub"
+      initialRouteName="ProgramDashboard"
       screenOptions={{
         headerShown: false,
       }}
     >
-      <Stack.Screen name="ProgramHub" component={ProgramHubScreen} />
       <Stack.Screen name="ProgramDashboard" component={ProgramDashboardScreenDeferred} />
       <Stack.Screen name="ProgramDay" component={ProgramDayScreenDeferred} />
       <Stack.Screen name="Paywall" component={PaywallScreen} />
