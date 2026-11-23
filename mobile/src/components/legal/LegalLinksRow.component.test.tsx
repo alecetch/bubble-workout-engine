@@ -1,8 +1,7 @@
 import React from "react";
 import { Alert, Linking } from "react-native";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { API_BASE_URL } from "../../api/config";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LegalLinksRow } from "./LegalLinksRow";
 
 const canOpenURLSpy = vi.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
@@ -10,6 +9,7 @@ const openURLSpy = vi.spyOn(Linking, "openURL").mockResolvedValue(undefined);
 const alertSpy = vi.spyOn(Alert, "alert").mockImplementation(() => {});
 
 describe("LegalLinksRow", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     canOpenURLSpy.mockResolvedValue(true);
@@ -21,6 +21,15 @@ describe("LegalLinksRow", () => {
 
     expect(screen.getByText("Terms of Service")).toBeInTheDocument();
     expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
+    expect(screen.queryByText("Help & Support")).not.toBeInTheDocument();
+  });
+
+  it("uses a configured website URL without duplicate slashes", async () => {
+    vi.stubEnv("EXPO_PUBLIC_WEBSITE_BASE_URL", "http://192.168.1.10:3000///");
+    vi.resetModules();
+    const { openLegalUrl } = await import("./LegalLinksRow");
+    await openLegalUrl("/support");
+    expect(openURLSpy).toHaveBeenCalledWith("http://192.168.1.10:3000/support");
   });
 
   it("opens the terms page", async () => {
@@ -28,7 +37,7 @@ describe("LegalLinksRow", () => {
 
     fireEvent.click(screen.getByText("Terms of Service"));
 
-    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/terms`));
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith("https://200days.app/terms"));
   });
 
   it("opens the privacy page", async () => {
@@ -36,7 +45,7 @@ describe("LegalLinksRow", () => {
 
     fireEvent.click(screen.getByText("Privacy Policy"));
 
-    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/privacy`));
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith("https://200days.app/privacy"));
   });
 
   it("shows an alert when the legal URL is unsupported", async () => {

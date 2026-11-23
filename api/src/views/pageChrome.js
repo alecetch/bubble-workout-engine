@@ -41,14 +41,13 @@ export const COMPANY_LEGAL_LINE =
   + "Registered office: Grain Store, Sheepstreet Lane, Etchingham, East Sussex TN19 7AY.";
 
 function footer() {
-  const previewLinks = marketingPreviewEnabled() ? '<a href="/support">Support</a>' : "";
   return `
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-links">
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
-        ${previewLinks}
+        <a href="/support">Support</a>
       </div>
       <p class="footer-copy">© 2026 ${getBrand().operator}. All rights reserved.</p>
       <a href="/download" class="app-store-badge">Get launch updates</a>

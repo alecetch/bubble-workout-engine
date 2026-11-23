@@ -1,3 +1,4 @@
+import { withWebsiteBrand } from "./helpers/websiteBrand.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -11,7 +12,6 @@ const gatedPaths = [
   "/strength",
   "/testimonials",
   "/press",
-  "/support",
   "/pricing",
   "/signup",
   "/signup/confirmed",
@@ -86,10 +86,45 @@ test("preview-only marketing pages render when launch gate is on", async () => {
 test("published marketing pages remain available when launch gate is off", async () => {
   await withPreview(null, async () => {
     await withServer(createApp(), async (baseUrl) => {
-      for (const path of ["/", "/download", "/privacy", "/terms"]) {
+      for (const path of ["/", "/download", "/privacy", "/terms", "/support"]) {
         const response = await fetch(`${baseUrl}${path}`);
         assert.equal(response.status, 200, path);
       }
     });
   });
+});
+
+
+test("support is public with 200 Days contact details while campaign pages stay gated", async () => {
+  await withWebsiteBrand("200days", async () => {
+    await withServer(createApp(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/support`);
+      assert.equal(response.status, 200);
+      const body = await response.text();
+      assert.match(body, /200 Days/);
+      assert.match(body, /mailto:support@200days\.app/);
+      assert.doesNotMatch(body, /support@getforma\.fit/);
+      for (const path of ["/hyrox", "/strength"]) {
+        assert.equal((await fetch(`${baseUrl}${path}`)).status, 404, path);
+      }
+    });
+  }, { MARKETING_PREVIEW_ENABLED: "false" });
+});
+
+test("public privacy footer links to support and the public sitemap includes it", async () => {
+  await withWebsiteBrand("200days", async () => {
+    await withServer(createApp(), async (baseUrl) => {
+      const privacy = await fetch(`${baseUrl}/privacy`);
+      assert.equal(privacy.status, 200);
+      const body = await privacy.text();
+      const footer = body.match(/<footer[\s\S]*?<\/footer>/)?.[0];
+      assert.ok(footer);
+      assert.match(footer, /href="\/support">Support<\/a>/);
+      const sitemap = await fetch(`${baseUrl}/sitemap.xml`);
+      assert.equal(sitemap.status, 200);
+      const xml = await sitemap.text();
+      assert.match(xml, /<loc>https:\/\/200days\.app\/support<\/loc>/);
+      assert.doesNotMatch(xml, /<loc>[^<]*\/hyrox<\/loc>/);
+    });
+  }, { MARKETING_PREVIEW_ENABLED: "false" });
 });

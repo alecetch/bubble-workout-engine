@@ -956,4 +956,4 @@ marketingRouter.get("/testimonials", gatePage, testimonialsHandler);
 marketingRouter.get("/press", gatePage, pressHandler);
 marketingRouter.get("/privacy", privacyHandler);
 marketingRouter.get("/terms", termsHandler);
-marketingRouter.get("/support", gatePage, supportHandler);
+marketingRouter.get("/support", supportHandler);

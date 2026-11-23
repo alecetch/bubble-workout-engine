@@ -1,12 +1,12 @@
 import React from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { API_BASE_URL } from "../../api/config";
+import { WEBSITE_BASE_URL } from "../../config/brand";
 import { colors } from "../../theme/colors";
 import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 
-export async function openLegalUrl(path: "/terms" | "/privacy"): Promise<void> {
-  const url = `${API_BASE_URL}${path}`;
+export async function openLegalUrl(path: "/terms" | "/privacy" | "/support"): Promise<void> {
+  const url = `${WEBSITE_BASE_URL}${path}`;
   try {
     const supported = await Linking.canOpenURL(url);
     if (!supported) throw new Error("unsupported");

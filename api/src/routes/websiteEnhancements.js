@@ -230,7 +230,7 @@ websiteEnhancementsRouter.get("/sitemap.xml", (_req, res) => {
   const previewEnabled = process.env.MARKETING_PREVIEW_ENABLED === "true";
   const staticPaths = previewEnabled
     ? ["/", "/download", "/pricing", "/hyrox", "/strength", "/testimonials", "/press", "/guides", "/partners", "/blog", "/changelog", "/privacy", "/terms", "/support", "/signup"]
-    : ["/", "/download", "/privacy", "/terms"];
+    : ["/", "/download", "/privacy", "/terms", "/support"];
   let blogSlugs = [];
   try {
     if (!previewEnabled) throw new Error("preview gated");

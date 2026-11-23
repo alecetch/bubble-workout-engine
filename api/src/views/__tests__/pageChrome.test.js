@@ -27,7 +27,7 @@ test("wrapPage hides preview navigation when launch gate is off", () => {
   const html = withPreview(null, () => wrapPage("Home", "<p>Hello</p>"));
   assert.match(html, /href="\/download"/);
   assert.doesNotMatch(html, /href="\/pricing"/);
-  assert.doesNotMatch(html, /href="\/support"/);
+  assert.match(html.match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? "", /href="\/support"/);
 });
 
 test("wrapPage shows preview navigation when launch gate is on", () => {
