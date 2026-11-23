@@ -544,6 +544,12 @@ export function SettingsScreen({ navigation }: Props): React.JSX.Element {
             <SettingsRow
               label="Privacy Policy"
               onPress={() => void openLegalUrl("/privacy")}
+              showDivider
+              showChevron
+            />
+            <SettingsRow
+              label="Help & Support"
+              onPress={() => void openLegalUrl("/support")}
               showChevron
             />
           </View>

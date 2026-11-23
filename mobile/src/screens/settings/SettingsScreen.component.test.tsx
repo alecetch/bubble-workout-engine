@@ -246,10 +246,13 @@ describe("legal section", () => {
     expect(screen.getByText("Privacy Policy")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Terms of Service" }));
-    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/terms`));
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith("https://200days.app/terms"));
 
     fireEvent.click(screen.getByRole("button", { name: "Privacy Policy" }));
-    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith(`${API_BASE_URL}/privacy`));
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith("https://200days.app/privacy"));
+    fireEvent.click(screen.getByRole("button", { name: "Help & Support" }));
+    await waitFor(() => expect(openURLSpy).toHaveBeenCalledWith("https://200days.app/support"));
+    expect(openURLSpy.mock.calls.every(([url]) => !url.startsWith(API_BASE_URL))).toBe(true);
   });
 
   it("shows an alert when a hosted legal page cannot open", async () => {
