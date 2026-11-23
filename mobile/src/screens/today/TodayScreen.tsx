@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -14,9 +14,9 @@ import { BonusWorkoutSheet } from "../../components/today/BonusWorkoutSheet";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import { queryKeys, useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
-import { getDayStatus } from "../../utils/localWorkoutLog";
+import { getDayStatus, setWorkoutComplete } from "../../utils/localWorkoutLog";
 import { type ProgramDayStatus } from "../../components/program/CalendarDayPillRow";
-import { computeLifecycleState, type TodayLifecycleState } from "./todayLifecycle";
+import { mergeDayStatuses, computeLifecycleState, type TodayLifecycleState } from "./todayLifecycle";
 import { colors } from "../../theme/colors";
 import { radii } from "../../theme/components";
 import { spacing } from "../../theme/spacing";
@@ -91,16 +91,28 @@ export function TodayScreen(): React.JSX.Element {
     return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getUTCDay()] ?? "sun";
   }, [todayIso]);
 
-  const [dayStatusByProgramDayId, setDayStatusByProgramDayId] = useState<
+  const [localDayStatusByProgramDayId, setDayStatusByProgramDayId] = useState<
     Record<string, ProgramDayStatus>
   >({});
 
   const calendarSig = useMemo(
     () =>
       calendarDays
-        .map((d) => `${d.programDayId ?? ""}:${d.weekNumber ?? ""}:${d.calendarDate ?? ""}`)
+        .map((d) => `${d.programDayId ?? ""}:${d.weekNumber ?? ""}:${d.calendarDate ?? ""}:${d.status ?? ""}`)
         .join("|"),
     [calendarDays],
+  );
+
+  const serverCompletionDays = useMemo(
+    () => calendarDays.map(day => ({ programDayId: day.programDayId, status: day.status })),
+    [calendarSig],
+  );
+  const serverCompletionRef = useRef(serverCompletionDays);
+  serverCompletionRef.current = serverCompletionDays;
+  const statusRefreshId = useRef(0);
+  const dayStatusByProgramDayId = useMemo(
+    () => mergeDayStatuses(localDayStatusByProgramDayId, serverCompletionDays),
+    [localDayStatusByProgramDayId, serverCompletionDays],
   );
 
   const programDayIdsSignature = useMemo(
@@ -116,6 +128,7 @@ export function TodayScreen(): React.JSX.Element {
   );
 
   const refreshDayStatuses = useCallback(async (): Promise<void> => {
+    const refreshId = ++statusRefreshId.current;
     const programDayIds = programDayIdsSignature ? programDayIdsSignature.split(",") : [];
     if (programDayIds.length === 0) {
       setDayStatusByProgramDayId((current) => (shallowEqualRecord(current, {}) ? current : {}));
@@ -129,11 +142,16 @@ export function TodayScreen(): React.JSX.Element {
       }),
     );
 
-    const next: Record<string, ProgramDayStatus> = {};
+    if (refreshId !== statusRefreshId.current) return;
+    const local: Record<string, ProgramDayStatus> = {};
     entries.forEach(([id, status]) => {
-      next[id] = status;
+      local[id] = status;
     });
 
+    const next = mergeDayStatuses(local, serverCompletionRef.current);
+    for (const [id, status] of entries) {
+      if (next[id] === "complete" && status !== "complete") void setWorkoutComplete(id, true).catch(() => {});
+    }
     setDayStatusByProgramDayId((current) => (shallowEqualRecord(current, next) ? current : next));
   }, [programDayIdsSignature]);
 
@@ -153,7 +171,7 @@ export function TodayScreen(): React.JSX.Element {
 
   useEffect(() => {
     void refreshDayStatuses();
-  }, [refreshDayStatuses]);
+  }, [refreshDayStatuses, serverCompletionDays]);
 
   const lifecycleState: TodayLifecycleState = computeLifecycleState({
     resolvedProgramId,

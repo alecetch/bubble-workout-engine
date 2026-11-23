@@ -8,7 +8,7 @@ import { TodayScreen } from "./TodayScreen";
 import { claimYearMilestone, markYearMilestoneSeen } from "../../api/yearProgress";
 import { useYearProgress, useActivePrograms, useEntitlement, useProgramOverview } from "../../api/hooks";
 import { useSessionStore } from "../../state/session/sessionStore";
-import { getDayStatus } from "../../utils/localWorkoutLog";
+import { getDayStatus, setWorkoutComplete } from "../../utils/localWorkoutLog";
 import { mockZustandSelector } from "../../__test-utils__";
 
 const storage = vi.hoisted(() => new Map<string, string>());
@@ -46,6 +46,7 @@ vi.mock("../../state/session/sessionStore", () => ({
 
 vi.mock("../../utils/localWorkoutLog", () => ({
   getDayStatus: vi.fn(),
+  setWorkoutComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../components/interaction/PressableScale", () => ({
@@ -94,6 +95,7 @@ describe("TodayScreen", () => {
       error: null,
     } as any);
     getDayStatusMock.mockResolvedValue("scheduled");
+    vi.mocked(setWorkoutComplete).mockClear();
   });
 
   afterEach(() => {
@@ -357,6 +359,21 @@ describe("TodayScreen", () => {
       years: [{ year: 2026, count }] } } as any);
     render(<TodayScreen />); await flushEffects();
     expect(screen.queryByText(/2027 starts now/)).not.toBeInTheDocument();
+  });
+
+  it("backfills a server-completed Today after reinstall without offering Start",async()=>{
+    useProgramOverviewMock.mockReturnValue({data:overview([{calendarDate:"2026-05-01",isTrainingDay:true,programDayId:"day-1",weekNumber:1,status:"complete"}]),isLoading:false,isError:false} as any);
+    render(<TodayScreen/>);await flushEffects();
+    expect(screen.getByText("Day 88 is in.")).toBeInTheDocument();expect(screen.queryByText("Start Workout")).not.toBeInTheDocument();
+    expect(setWorkoutComplete).toHaveBeenCalledWith("day-1",true);
+  });
+  it("reconciles a changed server status even when calendar IDs stay the same",async()=>{
+    const calendar={calendarDate:"2026-05-01",isTrainingDay:true,programDayId:"day-1",weekNumber:1,status:"scheduled"};
+    useProgramOverviewMock.mockReturnValue({data:overview([calendar]),isLoading:false,isError:false} as any);
+    const view=render(<TodayScreen/>);await flushEffects();expect(screen.getByText("Start Workout")).toBeInTheDocument();
+    useProgramOverviewMock.mockReturnValue({data:overview([{...calendar,status:"complete"}]),isLoading:false,isError:false} as any);
+    view.rerender(<TodayScreen/>);await flushEffects();expect(screen.getByText("Day 88 is in.")).toBeInTheDocument();
+    expect(setWorkoutComplete).toHaveBeenCalledWith("day-1",true);
   });
 
 });

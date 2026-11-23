@@ -101,6 +101,7 @@ function segmentCardElement(
     <SegmentCard
       segment={props.segment ?? makeSegment()}
       isLogged={props.isLogged ?? false}
+      serverDayComplete={props.serverDayComplete}
       exerciseSetCounts={props.exerciseSetCounts}
       programId={props.programId ?? "program-1"}
       programDayId={props.programDayId ?? "day-1"}
@@ -1428,6 +1429,13 @@ describe("SegmentCard — round-based logging (superset)", () => {
     const card=renderCard(props);fireEvent.click(screen.getByText("Start Exercise"));expect(screen.getByDisplayValue("60")).toBeInTheDocument();
     vi.mocked(useWeightUnit).mockReturnValue("lbs");card.rerender(segmentCardElement({...props,isLogged:true}));
     await waitForSlow(()=>expect(screen.getByDisplayValue("130")).toBeInTheDocument());
+  });
+
+  it("server-complete days restore exercise completion and Resume after reinstall",async()=>{
+    existingLogRows=savedRows(1);renderCard({serverDayComplete:true,segment:makeSegment({},[makeExercise({sets:3})])});
+    await waitForSlow(()=>expect(screen.getByText("Exercise Complete")).toBeInTheDocument());
+    expect(screen.getByText("Resume")).toBeInTheDocument();expect(screen.queryByText("Start Exercise")).not.toBeInTheDocument();
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
   });
 
 });

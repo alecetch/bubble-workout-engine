@@ -587,6 +587,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
             key={segment.id}
             segment={segment}
             isLogged={Boolean(segmentLogs[segment.id])}
+            serverDayComplete={dayQuery.data?.day?.isCompleted ?? false}
             exerciseSetCounts={segmentLogs[segment.id]?.exerciseSetCounts}
             programId={programId}
             programDayId={programDayId}
