@@ -1,8 +1,12 @@
+import { onlineManager, QueryClient, MutationObserver } from "@tanstack/react-query";
+import { Alert } from "react-native";
 /** @vitest-environment jsdom */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWorkoutComplete } from "../../../utils/localWorkoutLog";
 import { useDayCompletionFlow } from "./useDayCompletionFlow";
+
+vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 
 vi.mock("../../../api/hooks", () => ({
   queryKeys: {
@@ -91,6 +95,8 @@ function endCheck(overrides: Record<string, unknown>) {
 }
 
 afterEach(() => {
+  onlineManager.setOnline(true);
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -280,4 +286,49 @@ describe("useDayCompletionFlow", () => {
     expect(parentNav.navigate).toHaveBeenCalledWith("TodayTab");
     expect(nav.navigate).not.toHaveBeenCalledWith("ProgramDashboard", expect.anything());
   });
+  it("offline dismissal closes the summary without queuing completion", async()=>{
+    onlineManager.setOnline(false);
+    const flow=renderFlow();
+    await act(async()=>flow.result.current.handleSummaryDismiss());
+    expect(flow.markDayComplete.mutateAsync).not.toHaveBeenCalled();
+    expect(flow.params.setSummaryVisible).toHaveBeenCalledWith(false);
+    expect(Alert.alert).toHaveBeenCalledWith("You're offline",expect.stringContaining("Your sets are saved on this phone."),[{text:"OK"}]);
+    expect(setWorkoutCompleteMock).not.toHaveBeenCalled();
+    expect(flow.params.setWorkoutCompleteState).not.toHaveBeenCalled();
+  });
+  it("a never-settling request times out, ignores late success and allows another attempt",async()=>{
+    vi.useFakeTimers();let resolve!:(value:any)=>void;
+    const pending=new Promise(r=>{resolve=r;});
+    const mutation={isPending:false,isPaused:false,mutateAsync:vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined),reset:vi.fn()} as any;
+    const flow=renderFlow({markDayComplete:mutation});
+    let request!:Promise<void>;
+    act(()=>{request=flow.result.current.handleSummaryDismiss();});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(15000);await request;});
+    expect(flow.params.setConfirmationText).toHaveBeenCalledWith("Couldn't finish the workout. Check your connection and try again.");
+    expect(setWorkoutCompleteMock).not.toHaveBeenCalled();expect(mutation.reset).toHaveBeenCalledOnce();
+    await act(async()=>{resolve({});await Promise.resolve();});
+    expect(setWorkoutCompleteMock).not.toHaveBeenCalled();
+    await act(async()=>flow.result.current.handleSummaryDismiss());
+    expect(mutation.mutateAsync).toHaveBeenCalledTimes(2);expect(setWorkoutCompleteMock).toHaveBeenCalledOnce();
+  });
+  it("removes only this paused completion so reconnect cannot send a stale date",async()=>{
+    vi.useFakeTimers();const client=new QueryClient();const send=vi.fn().mockResolvedValue({});
+    const observer=new MutationObserver(client,{mutationFn:send});
+    const otherSend=vi.fn().mockResolvedValue({});
+    const otherObserver=new MutationObserver(client,{mutationFn:otherSend});
+    const mutation={isPending:false,isPaused:false,reset:()=>observer.reset(),mutateAsync:(variables:any)=>{
+      onlineManager.setOnline(false);return observer.mutate(variables);
+    }} as any;
+    const flow=renderFlow({markDayComplete:mutation,queryClient:client,localDate:"2026-11-21"});
+    let request!:Promise<void>;act(()=>{request=flow.result.current.handleSummaryDismiss();});
+    void otherObserver.mutate({programDayId:"another-day"}).catch(()=>{});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
+    expect(client.getMutationCache().getAll()).toHaveLength(2);
+    expect(client.getMutationCache().getAll()[0].state.isPaused).toBe(true);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(15000);await request;});
+    expect(client.getMutationCache().getAll()).toHaveLength(1);
+    onlineManager.setOnline(true);await client.resumePausedMutations();
+    expect(send).not.toHaveBeenCalled();expect(otherSend).toHaveBeenCalledOnce();expect(setWorkoutCompleteMock).not.toHaveBeenCalled();client.clear();
+  });
+
 });

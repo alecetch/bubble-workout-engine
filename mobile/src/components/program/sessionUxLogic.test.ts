@@ -1,3 +1,4 @@
+import { mergeSessionLogRows } from "./sessionUxLogic";
 import { weightLooksUnusual, buildInitialSetInputMap, buildSegmentLogRows, computeSessionStatsFromLoggedRows, computeSessionStatsFromSegments, computeTotalPrescribedSets, formatRoundSummary, getExerciseSetCount, guidelinePrefill, parseRepsPrefill, parseWeightPrefill, repsPrefill, } from "./sessionUxLogic";
 test("guidelinePrefill prefers progression load over guideline load when both are present", () => {
     expect(guidelinePrefill({
@@ -257,4 +258,12 @@ test("pound prefill and logged restoration produce kg rows at the save boundary"
  expect(buildSegmentLogRows([exercise],initial,"lbs")[0].weightKg).toBe(61.23);
  const restored=buildInitialSetInputMap([exercise],[{programExerciseId:"ex",orderIndex:1,weightKg:61.23,repsCompleted:5,rirActual:2} as any],"lbs");
  expect(restored.ex[0].weight).toBe("135");expect(buildInitialSetInputMap([exercise],[],"kg").ex[0].weight).toBe("60");
+});
+
+test("outbox stats replace matching server sets and add outbox-only sets without mutating either",()=>{
+ const server=[{programExerciseId:"squat",orderIndex:1,weightKg:10,repsCompleted:5,rirActual:null}];
+ const pending=[{...server[0],weightKg:20},{...server[0],orderIndex:2,weightKg:30}];
+ const merged=mergeSessionLogRows(server,pending);expect(merged).toEqual(pending);
+ expect(server[0].weightKg).toBe(10);expect(pending).toHaveLength(2);
+ expect(computeSessionStatsFromLoggedRows({segment:merged}).totalVolumeKg).toBe(250);
 });

@@ -1,10 +1,12 @@
-import { isOutboxAvailable } from "../../sync/setLogOutbox";
+import { showOfflineCompletionAlert, withCompletionTimeout } from "../../utils/dayCompletionSafety";
+import { flush } from "../../sync/setLogOutboxSender";
+import { listForDay, isOutboxAvailable } from "../../sync/setLogOutbox";
 import { useSetLogOutbox } from "../../sync/useSetLogOutboxSync";
 import { toLocalIsoDate } from "../../utils/localDate";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ScrollViewInstance } from "react-native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -18,7 +20,7 @@ import { ExerciseSwapSheet } from "../../components/program/ExerciseSwapSheet";
 import { HeroHeader } from "../../components/program/HeroHeader";
 import { SegmentCard } from "../../components/program/SegmentCard";
 import { SessionSummaryModal } from "../../components/program/SessionSummaryModal";
-import { computeSessionStatsFromLoggedRows, computeTotalPrescribedSets } from "../../components/program/sessionUxLogic";
+import { mergeSessionLogRows, computeSessionStatsFromLoggedRows, computeTotalPrescribedSets } from "../../components/program/sessionUxLogic";
 import { isWarmupOrCooldownSegment } from "../../components/program/segmentCardLogic";
 import { WorkoutProgressHeader } from "../../components/program/WorkoutProgressHeader";
 import type { OnboardingStackParamList } from "../../navigation/OnboardingNavigator";
@@ -238,21 +240,34 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }, [programDayId]);
 
   const fetchSessionStats = useCallback(async (): Promise<SessionStats> => {
+    const pending = userId ? await listForDay(userId, programDayId) : [];
     const entries = await Promise.all(orderedSegments
-      .filter(segment => segmentDoneSetCounts[segment.id] > 0 || segmentLogs[segment.id])
+      .filter(segment => segmentDoneSetCounts[segment.id] > 0 || segmentLogs[segment.id]
+        || pending.some(entry => entry.workoutSegmentId === segment.id))
       .map(async segment => {
+        const outboxRows = pending.filter(entry => entry.workoutSegmentId === segment.id).map(entry => entry.row);
+        const fallback = () => [segment.id, mergeSessionLogRows(segmentLogRows[segment.id] ?? [], outboxRows)] as const;
+        const queryKey = queryKeys.segmentExerciseLogs(segment.id, programDayId);
+        if (!onlineManager.isOnline() || queryClient.getQueryState(queryKey)?.fetchStatus === "paused") return fallback();
         try {
-          const rows = await queryClient.fetchQuery({
+          const request = queryClient.fetchQuery({
             queryKey: queryKeys.segmentExerciseLogs(segment.id, programDayId),
             queryFn: () => getSegmentExerciseLogs({ userId, workoutSegmentId: segment.id, programDayId }),
             staleTime: 0,
           });
-          return [segment.id, rows.map(row => ({
+          if (queryClient.getQueryState(queryKey)?.fetchStatus === "paused") {
+            void request.catch(() => {});
+            await queryClient.cancelQueries({ queryKey, exact: true });
+            return fallback();
+          }
+          const rows = await withCompletionTimeout(request, 5_000);
+          return [segment.id, mergeSessionLogRows(rows.map(row => ({
             programExerciseId: row.programExerciseId, orderIndex: row.orderIndex,
             weightKg: row.weightKg, repsCompleted: row.repsCompleted, rirActual: row.rirActual,
-          }))] as const;
+          })), outboxRows)] as const;
         } catch {
-          return [segment.id, segmentLogRows[segment.id] ?? []] as const;
+          void queryClient.cancelQueries({ queryKey, exact: true });
+          return fallback();
         }
       }));
     return computeSessionStatsFromLoggedRows(Object.fromEntries(entries));
@@ -400,11 +415,16 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }, []);
 
   const openSummary = useCallback(() => {
+    if (!onlineManager.isOnline()) { showOfflineCompletionAlert(); return; }
     const today = toLocalIsoDate();
     const show = (date?: string) => {
+      if (!onlineManager.isOnline()) { showOfflineCompletionAlert(); return; }
       const requestId = ++summaryRequestId.current;
       setSummaryStats(null);
-      const request = fetchSessionStats();
+      const request = (async () => {
+        if (userId) await withCompletionTimeout(flush(userId), 5_000).catch(() => {});
+        return fetchSessionStats();
+      })();
       summaryStatsRequest.current = request;
       void request.then(stats => {
         if (summaryRequestId.current === requestId) setSummaryStats(stats);
@@ -424,7 +444,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         } },
       ], { cancelable: false });
     } else show();
-  }, [day?.scheduledDate, completionLocalDate, fetchSessionStats]);
+  }, [day?.scheduledDate, completionLocalDate, fetchSessionStats, userId]);
 
   const continueComplete = useCallback(() => {
     if (completedExerciseCount < totalExercises) {
@@ -443,6 +463,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
   }, [completedExerciseCount, totalExercises, openSummary]);
 
   const handleCompletePress = useCallback(() => {
+    if (!onlineManager.isOnline()) { showOfflineCompletionAlert(); return; }
     if (unsavedCount > 0) {
       Alert.alert("Some sets haven't saved", `${unsavedCount} set(s) haven't saved yet.`, [
         { text: "Retry now", isPreferred: true, onPress: () => setRetryRequest(current => current + 1) },
@@ -631,7 +652,7 @@ export function ProgramDayScreen({ route, navigation }: Props): React.JSX.Elemen
         yearClubs={yearProgress?.clubs}
         year={summaryYear}
         adaptedExercises={adaptedExercisesForSummary}
-        isSubmitting={markDayComplete.isPending}
+        isSubmitting={markDayComplete.isPending && !markDayComplete.isPaused}
         onDismiss={() => {
           void handleSummaryDismiss();
         }}
