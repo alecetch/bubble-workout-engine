@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { updatePreferredHeightUnit, updatePreferredUnit } from "../../api/profileApi";
+import { getPreferredHeightUnit, getPreferredUnit, updatePreferredHeightUnit, updatePreferredUnit } from "../../api/profileApi";
 import { PressableScale } from "../../components/interaction/PressableScale";
 import type { SettingsStackParamList } from "../../navigation/SettingsStackNavigator";
 import { colors } from "../../theme/colors";
@@ -24,9 +24,25 @@ const HEIGHT_OPTIONS: { value: "cm" | "ft"; label: string }[] = [
 
 export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Element {
   const queryClient = useQueryClient();
+  const [saveError, setSaveError] = useState<"weight" | "height" | null>(null);
+  const weightQuery = useQuery({ queryKey: ["preferredUnit"], queryFn: getPreferredUnit, staleTime: Infinity });
+  const heightQuery = useQuery({ queryKey: ["preferredHeightUnit"], queryFn: getPreferredHeightUnit, staleTime: Infinity });
+  const currentUnit = weightQuery.data ?? route.params.currentUnit;
+  const currentHeightUnit = heightQuery.data ?? route.params.currentHeightUnit;
 
   const weightMutation = useMutation({
     mutationFn: (unit: "kg" | "lbs") => updatePreferredUnit(unit),
+    onMutate: async (unit) => {
+      setSaveError(null);
+      await queryClient.cancelQueries({ queryKey: ["preferredUnit"] });
+      const previous = queryClient.getQueryData(["preferredUnit"]) ?? currentUnit;
+      queryClient.setQueryData(["preferredUnit"], unit);
+      return { previous };
+    },
+    onError: (_error, _unit, context) => {
+      queryClient.setQueryData(["preferredUnit"], context?.previous ?? currentUnit);
+      setSaveError("weight");
+    },
     onSuccess: (_result, unit) => {
       queryClient.setQueryData(["preferredUnit"], unit);
     },
@@ -34,13 +50,21 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
 
   const heightMutation = useMutation({
     mutationFn: (unit: "cm" | "ft") => updatePreferredHeightUnit(unit),
+    onMutate: async (unit) => {
+      setSaveError(null);
+      await queryClient.cancelQueries({ queryKey: ["preferredHeightUnit"] });
+      const previous = queryClient.getQueryData(["preferredHeightUnit"]) ?? currentHeightUnit;
+      queryClient.setQueryData(["preferredHeightUnit"], unit);
+      return { previous };
+    },
+    onError: (_error, _unit, context) => {
+      queryClient.setQueryData(["preferredHeightUnit"], context?.previous ?? currentHeightUnit);
+      setSaveError("height");
+    },
     onSuccess: (_result, unit) => {
       queryClient.setQueryData(["preferredHeightUnit"], unit);
     },
   });
-
-  const currentUnit = route.params.currentUnit;
-  const currentHeightUnit = route.params.currentHeightUnit;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -61,12 +85,18 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
             return (
               <PressableScale
                 key={option.value}
+                accessibilityRole="radio"
+                accessibilityLabel={option.label}
+                accessibilityState={{ checked: selected, disabled: weightMutation.isPending }}
                 disabled={weightMutation.isPending}
-                onPress={() => weightMutation.mutate(option.value)}
+                onPress={() => {
+                  setSaveError(null);
+                  if (!selected) weightMutation.mutate(option.value);
+                }}
               >
                 <View style={[styles.row, index < WEIGHT_OPTIONS.length - 1 ? styles.rowDivider : null]}>
                   <Text style={styles.rowLabel}>{option.label}</Text>
-                  {weightMutation.isPending && selected ? (
+                  {weightMutation.isPending && weightMutation.variables === option.value ? (
                     <ActivityIndicator color={colors.accent} />
                   ) : (
                     <Ionicons
@@ -81,6 +111,7 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
           })}
         </View>
 
+        {saveError === "weight" ? <Text accessibilityRole="alert" style={styles.error}>Couldn't change units. Check your connection and try again.</Text> : null}
         <Text style={styles.note}>Used for body weight and training weights.</Text>
         <Text style={styles.sectionLabel}>HEIGHT</Text>
         <View style={styles.card}>
@@ -89,12 +120,18 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
             return (
               <PressableScale
                 key={option.value}
+                accessibilityRole="radio"
+                accessibilityLabel={option.label}
+                accessibilityState={{ checked: selected, disabled: heightMutation.isPending }}
                 disabled={heightMutation.isPending}
-                onPress={() => heightMutation.mutate(option.value)}
+                onPress={() => {
+                  setSaveError(null);
+                  if (!selected) heightMutation.mutate(option.value);
+                }}
               >
                 <View style={[styles.row, index < HEIGHT_OPTIONS.length - 1 ? styles.rowDivider : null]}>
                   <Text style={styles.rowLabel}>{option.label}</Text>
-                  {heightMutation.isPending && selected ? (
+                  {heightMutation.isPending && heightMutation.variables === option.value ? (
                     <ActivityIndicator color={colors.accent} />
                   ) : (
                     <Ionicons
@@ -109,8 +146,9 @@ export function UnitPickerScreen({ navigation, route }: Props): React.JSX.Elemen
           })}
         </View>
 
+        {saveError === "height" ? <Text accessibilityRole="alert" style={styles.error}>Couldn't change units. Check your connection and try again.</Text> : null}
         <Text style={styles.note}>
-          Changing units affects how new values are entered. Stored data is not converted.
+          Weights and heights are shown and entered in the units you choose. Your saved history isn't changed.
         </Text>
       </View>
     </SafeAreaView>
@@ -172,6 +210,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     ...typography.body,
   },
+  error: { color: colors.error, ...typography.small },
   note: {
     color: colors.textSecondary,
     ...typography.small,
