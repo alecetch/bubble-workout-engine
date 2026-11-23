@@ -18,6 +18,7 @@ type PressableScaleProps = {
   containerStyle?: StyleProp<ViewStyle>;
   hitSlop?: PressableProps["hitSlop"];
   accessibilityLabel?: string;
+  accessibilityRole?: PressableProps["accessibilityRole"];
   accessibilityState?: PressableProps["accessibilityState"];
   testID?: string;
 };
@@ -35,6 +36,7 @@ export function PressableScale({
   containerStyle,
   hitSlop,
   accessibilityLabel,
+  accessibilityRole = "button",
   accessibilityState,
   testID,
 }: PressableScaleProps): React.JSX.Element {
@@ -51,7 +53,7 @@ export function PressableScale({
       hitSlop={hitSlop}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
-      accessibilityRole="button"
+      accessibilityRole={accessibilityRole}
       style={containerStyle}
     >
       <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>

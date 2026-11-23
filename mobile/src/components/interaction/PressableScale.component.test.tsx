@@ -11,6 +11,7 @@ vi.mock("react-native", async () => {
     ...actual,
     Pressable: ({
       accessibilityLabel,
+      accessibilityRole,
       accessibilityState,
       children,
       disabled,
@@ -23,6 +24,8 @@ vi.mock("react-native", async () => {
       ReactActual.createElement(
         "button",
         {
+          role: accessibilityRole,
+          "aria-checked": accessibilityState?.checked,
           "aria-label": accessibilityLabel,
           "aria-expanded": accessibilityState?.expanded,
           "data-testid": testID,
@@ -73,6 +76,13 @@ describe("PressableScale", () => {
     fireEvent.click(screen.getByText("Tap me"));
 
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards radio role and checked state while keeping button as the default", () => {
+    const view = render(<PressableScale accessibilityRole="radio" accessibilityLabel="Kilograms" accessibilityState={{ checked: true }}>kg</PressableScale>);
+    expect(screen.getByRole("radio", { name: "Kilograms" })).toHaveAttribute("aria-checked", "true");
+    view.rerender(<PressableScale accessibilityLabel="Kilograms">kg</PressableScale>);
+    expect(screen.getByRole("button", { name: "Kilograms" })).toBeInTheDocument();
   });
 
   it("forwards expanded accessibility state for the year picker", () => {

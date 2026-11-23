@@ -1,119 +1,105 @@
 import React from "react";
 import { axe } from "jest-axe";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UnitPickerScreen } from "./UnitPickerScreen";
+import { getPreferredHeightUnit, getPreferredUnit, updatePreferredHeightUnit, updatePreferredUnit } from "../../api/profileApi";
+import { createTestQueryClient, renderWithProviders } from "../../__test-utils__";
 
+vi.unmock("@tanstack/react-query");
 vi.mock("../../api/profileApi", () => ({
-  updatePreferredUnit: vi.fn(),
-  updatePreferredHeightUnit: vi.fn(),
+  getPreferredUnit: vi.fn(), getPreferredHeightUnit: vi.fn(),
+  updatePreferredUnit: vi.fn(), updatePreferredHeightUnit: vi.fn(),
 }));
-
-vi.mock("@expo/vector-icons", () => ({
-  Ionicons: ({ name }: any) => <span data-icon={name} data-testid={name} />,
-}));
-
+vi.mock("@expo/vector-icons", () => ({ Ionicons: ({ name }: any) => <span data-testid={name} /> }));
 vi.mock("../../components/interaction/PressableScale", () => ({
-  PressableScale: ({ accessibilityLabel, children, disabled, onPress }: any) => (
-    <button type="button" aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>
-      {children}
-    </button>
+  PressableScale: ({ accessibilityRole, accessibilityState, accessibilityLabel, children, disabled, onPress }: any) => (
+    <button type="button" role={accessibilityRole} aria-checked={accessibilityState?.checked}
+      aria-label={accessibilityLabel} disabled={disabled} onClick={() => onPress?.()}>{children}</button>
   ),
 }));
 
-const weightMutateMock = vi.fn();
-const heightMutateMock = vi.fn();
-const setQueryDataMock = vi.fn();
-let mutationCallCount = 0;
-
-function installUseMutationMock() {
-  vi.mocked(useMutation).mockImplementation(() => {
-    mutationCallCount += 1;
-    const mutate = mutationCallCount === 1 ? weightMutateMock : heightMutateMock;
-    return {
-      mutate,
-      mutateAsync: vi.fn(),
-      isPending: false,
-      isError: false,
-      error: null,
-      reset: vi.fn(),
-    } as any;
-  });
+function renderScreen(cached = true) {
+  const queryClient = createTestQueryClient();
+  if (cached) {
+    queryClient.setQueryData(["preferredUnit"], "lbs");
+    queryClient.setQueryData(["preferredHeightUnit"], "cm");
+  }
+  const navigation = { goBack: vi.fn() };
+  renderWithProviders(<UnitPickerScreen navigation={navigation as any}
+    route={{ params: { currentUnit: "lbs", currentHeightUnit: "cm" } } as any} />, { queryClient });
+  return queryClient;
 }
-
-function renderScreen(params = { currentUnit: "kg", currentHeightUnit: "cm" }) {
-  mutationCallCount = 0;
-  const navigation = { navigate: vi.fn(), goBack: vi.fn() };
-  render(
-    <UnitPickerScreen
-      navigation={navigation as any}
-      route={{ params } as any}
-    />,
-  );
-  return navigation;
-}
-
-function rowFor(labelPattern: RegExp): HTMLElement {
-  return screen.getByText(labelPattern).closest("button") as HTMLElement;
-}
+const row = (label: RegExp) => screen.getByRole("radio", { name: label });
+const cases = [
+  { label: /kg.*Kilograms/, original: /lb.*Pounds/, update: updatePreferredUnit, key: "preferredUnit", next: "kg", previous: "lbs" },
+  { label: /ft.*Feet/, original: /cm.*Centimetres/, update: updatePreferredHeightUnit, key: "preferredHeightUnit", next: "ft", previous: "cm" },
+];
 
 describe("UnitPickerScreen", () => {
   beforeEach(() => {
-    weightMutateMock.mockReset();
-    heightMutateMock.mockReset();
-    setQueryDataMock.mockReset();
-    mutationCallCount = 0;
-    vi.mocked(useQueryClient).mockReturnValue({ setQueryData: setQueryDataMock } as any);
-    installUseMutationMock();
+    vi.mocked(updatePreferredUnit).mockReset().mockResolvedValue(undefined);
+    vi.mocked(updatePreferredHeightUnit).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getPreferredUnit).mockReset().mockResolvedValue("lbs");
+    vi.mocked(getPreferredHeightUnit).mockReset().mockResolvedValue("cm");
   });
-  it("has no accessibility violations in the default render state", async () => {
+  it("has no accessibility violations and explains shared units", async () => {
     renderScreen();
-    await act(async () => {});
     document.body.firstElementChild?.setAttribute("role", "main");
     expect(await axe(document.body)).toHaveNoViolations();
+    expect(screen.getByText("Used for body weight and training weights.")).toBeInTheDocument();
+    expect(screen.getByText("Weights and heights are shown and entered in the units you choose. Your saved history isn't changed.")).toBeInTheDocument();
+    expect(getPreferredUnit).not.toHaveBeenCalled();
+    expect(getPreferredHeightUnit).not.toHaveBeenCalled();
   });
-
-
-  it("renders WEIGHT section with kg and lbs options; kg is shown as selected", () => {
+  it.each(cases)("optimistically selects $next, puts the spinner on that row and keeps the saved choice", async ({ label, original, update, key, next }) => {
+    let resolve!: () => void;
+    vi.mocked(update).mockReturnValue(new Promise<void>(done => { resolve = done; }));
+    const queryClient = renderScreen();
+    fireEvent.click(row(label));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(next));
+    expect(row(label)).toHaveAttribute("aria-checked", "true");
+    expect(row(original)).toHaveAttribute("aria-checked", "false");
+    expect(row(label)).toBeDisabled();
+    expect(row(original)).toBeDisabled();
+    expect(within(row(label)).getByRole("progressbar")).toBeInTheDocument();
+    expect(within(row(original)).queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(queryClient.getQueryData([key])).toBe(next);
+    await act(async () => resolve());
+    await waitFor(() => expect(row(label)).not.toBeDisabled());
+    expect(row(label)).toHaveAttribute("aria-checked", "true");
+  });
+  it.each(cases)("rolls back a failed $next save and clears the error on the next tap", async ({ label, original, update, key, previous }) => {
+    vi.mocked(update).mockRejectedValueOnce(new Error("Offline"));
+    const queryClient = renderScreen();
+    fireEvent.click(row(label));
+    await screen.findByText("Couldn't change units. Check your connection and try again.");
+    expect(row(original)).toHaveAttribute("aria-checked", "true");
+    expect(row(label)).toHaveAttribute("aria-checked", "false");
+    expect(queryClient.getQueryData([key])).toBe(previous);
+    fireEvent.click(row(original));
+    expect(screen.queryByText(/Couldn't change units/)).not.toBeInTheDocument();
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+  it("does not save already selected options", () => {
     renderScreen();
-
-    expect(screen.getByText("WEIGHT")).toBeInTheDocument();
-    expect(screen.getByText(/kg.*Kilograms/)).toBeInTheDocument();
-    expect(screen.getByText(/lb.*Pounds/)).toBeInTheDocument();
-    expect(within(rowFor(/kg.*Kilograms/)).getByTestId("radio-button-on")).toBeInTheDocument();
-    expect(within(rowFor(/lb.*Pounds/)).getByTestId("radio-button-off")).toBeInTheDocument();
+    fireEvent.click(row(/lb.*Pounds/));
+    fireEvent.click(row(/cm.*Centimetres/));
+    expect(updatePreferredUnit).not.toHaveBeenCalled();
+    expect(updatePreferredHeightUnit).not.toHaveBeenCalled();
   });
-
-  it("renders HEIGHT section with cm and ft options; cm is shown as selected", () => {
-    renderScreen();
-
-    expect(screen.getByText("HEIGHT")).toBeInTheDocument();
-    expect(screen.getByText(/cm.*Centimetres/)).toBeInTheDocument();
-    expect(screen.getByText(/ft.*Feet & inches/)).toBeInTheDocument();
-    expect(within(rowFor(/cm.*Centimetres/)).getByTestId("radio-button-on")).toBeInTheDocument();
-    expect(within(rowFor(/ft.*Feet & inches/)).getByTestId("radio-button-off")).toBeInTheDocument();
+  it("observes cache updates instead of fixed route params", async () => {
+    const queryClient = renderScreen();
+    act(() => { queryClient.setQueryData(["preferredUnit"], "kg"); queryClient.setQueryData(["preferredHeightUnit"], "ft"); });
+    await waitFor(() => expect(row(/kg.*Kilograms/)).toHaveAttribute("aria-checked", "true"));
+    expect(row(/ft.*Feet/)).toHaveAttribute("aria-checked", "true");
   });
-
-  it("tapping lbs immediately calls the weight mutation with lbs", () => {
-    renderScreen();
-
-    fireEvent.click(rowFor(/lb.*Pounds/));
-
-    expect(weightMutateMock).toHaveBeenCalledWith("lbs");
-    expect(heightMutateMock).not.toHaveBeenCalled();
-  });
-
-  it("tapping ft immediately calls the height mutation with ft", () => {
-    renderScreen();
-
-    fireEvent.click(rowFor(/ft.*Feet & inches/));
-
-    expect(heightMutateMock).toHaveBeenCalledWith("ft");
-    expect(weightMutateMock).not.toHaveBeenCalled();
-  });
-  it("explains and caches the shared weight preference",()=>{
-    renderScreen();expect(screen.getByText("Used for body weight and training weights.")).toBeInTheDocument();
-    const options=vi.mocked(useMutation).mock.calls[0][0] as any;options.onSuccess(undefined,"lbs");expect(setQueryDataMock).toHaveBeenCalledWith(["preferredUnit"],"lbs");
+  it("uses route values until uncached preferences resolve", async () => {
+    let resolve!: (unit: "kg" | "lbs") => void;
+    vi.mocked(getPreferredUnit).mockReturnValue(new Promise(done => { resolve = done; }));
+    renderScreen(false);
+    expect(row(/lb.*Pounds/)).toHaveAttribute("aria-checked", "true");
+    await act(async () => resolve("kg"));
+    await waitFor(() => expect(row(/kg.*Kilograms/)).toHaveAttribute("aria-checked", "true"));
   });
 });
