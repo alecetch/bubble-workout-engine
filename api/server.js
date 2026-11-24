@@ -548,7 +548,7 @@ app.use(websiteEnhancementsRouter);
 app.use(contentHubRouter);
 app.use(affiliateProgramRouter);
 app.post("/api/hyrox/analyse", hyroxIpRateLimiter, hyroxEmailRateLimiter, validateHyroxSubmission, hyroxController.analyse);
-app.post("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter, createHyroxCalculatorEventsRouter(pool));
+app.use("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter, createHyroxCalculatorEventsRouter(pool));
 app.use("/api/hyrox/download-redirect", createHyroxDownloadRedirectRouter(pool));
 app.post("/api/hyrox/predict", predict);
 app.post("/api/hyrox/import-url", hyroxImportRateLimiter, makeImportUrlHandler(pool));

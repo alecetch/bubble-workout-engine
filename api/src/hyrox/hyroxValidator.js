@@ -68,22 +68,24 @@ export const hyroxImportRateLimiter = rateLimit({
   message: { error: "too_many_requests", message: "Too many import attempts. Please try again later." },
 });
 
-export const hyroxEventsIpRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: Number(process.env.HYROX_EVENTS_RATE_LIMIT_PER_MINUTE || 120),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "too_many_requests" },
-});
+// Each factory call gets independent in-memory stores, including in route tests.
+export function createHyroxEventsRateLimiters() {
+  const options = { windowMs: 60 * 1000, standardHeaders: true, legacyHeaders: false,
+    message: { error: "too_many_requests" } };
+  return {
+    hyroxEventsIpRateLimiter: rateLimit({
+      ...options,
+      max: Number(process.env.HYROX_EVENTS_RATE_LIMIT_PER_MINUTE || 120),
+    }),
+    hyroxEventsSessionRateLimiter: rateLimit({
+      ...options,
+      max: Number(process.env.HYROX_EVENTS_SESSION_RATE_LIMIT_PER_MINUTE || 30),
+      keyGenerator: (req) => (req.body?.sessionId ? String(req.body.sessionId) : ipKeyGenerator(req.ip)),
+    }),
+  };
+}
 
-export const hyroxEventsSessionRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: Number(process.env.HYROX_EVENTS_SESSION_RATE_LIMIT_PER_MINUTE || 30),
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => (req.body?.sessionId ? String(req.body.sessionId) : ipKeyGenerator(req.ip)),
-  message: { error: "too_many_requests" },
-});
+export const { hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter } = createHyroxEventsRateLimiters();
 
 export function hyroxEmailRateLimiter(req, res, next) {
   const email = String(req.body?.athlete?.email ?? "").trim().toLowerCase();

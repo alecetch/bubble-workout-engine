@@ -2,13 +2,14 @@ import logger from "../utils/logger.js";
 
 export function requestLogger(req, res, next) {
   const startMs = Date.now();
+  const url = req.originalUrl ?? req.url;
 
   req.log = logger.child({ request_id: req.request_id });
 
   req.log.debug({
     event: "http.request.start",
     method: req.method,
-    url: req.url,
+    url,
   });
 
   res.on("finish", () => {
@@ -24,7 +25,7 @@ export function requestLogger(req, res, next) {
     req.log[level]({
       event: "http.request.finish",
       method: req.method,
-      url: req.url,
+      url,
       status_code,
       duration_ms,
       ...appFields,
