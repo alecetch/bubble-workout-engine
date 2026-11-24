@@ -1,3 +1,4 @@
+import express from "express";
 import { EventEmitter } from "node:events";
 import logger from "../../utils/logger.js";
 import test from "node:test";
@@ -111,4 +112,31 @@ test("finish logs include bounded app headers and omit missing fields", t => {
   requestLogger({ headers, method: "GET", url: "/api/app-config" }, response, () => {}); response.emit("finish");
  }
  for (const field of ["app_platform", "app_version", "app_build"]) { assert.equal(field in logs[0], false); assert.equal(logs[1][field].length, 32); }
+});
+
+
+test("mounted routers log the original API URL at request start and finish", async t => {
+  const logs = [];
+  t.mock.method(logger, "child", () => ({
+    debug: value => logs.push(value), info: value => logs.push(value),
+  }));
+  const app = express();
+  const router = express.Router();
+  router.post("/hyrox/events", (req, res) => {
+    assert.equal(req.url, "/hyrox/events?source=calculator");
+    res.sendStatus(204);
+  });
+  app.use("/api", requestLogger, router);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/hyrox/events?source=calculator`, { method: "POST" });
+    assert.equal(response.status, 204);
+    assert.deepEqual(logs.map(({ event, url }) => ({ event, url })), [
+      { event: "http.request.start", url: "/api/hyrox/events?source=calculator" },
+      { event: "http.request.finish", url: "/api/hyrox/events?source=calculator" },
+    ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });

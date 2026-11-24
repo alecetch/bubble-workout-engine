@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import { createHyroxCalculatorEventsRouter } from "../src/routes/hyroxCalculatorEvents.js";
-import { hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter } from "../src/hyrox/hyroxValidator.js";
+import { createHyroxEventsRateLimiters } from "../src/hyrox/hyroxValidator.js";
 
 const SUBMISSION_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -27,18 +28,26 @@ async function withServer(app, fn) {
   }
 }
 
-function buildApp(db = createDb(), useRateLimit = false) {
+function buildApp(db = createDb()) {
   const app = express();
   app.use(express.json());
-  if (useRateLimit) {
-    app.post("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter, createHyroxCalculatorEventsRouter(db));
-  } else {
-    app.use("/api/hyrox/events", createHyroxCalculatorEventsRouter(db));
-  }
+  const { hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter } = createHyroxEventsRateLimiters();
+  app.use("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter, createHyroxCalculatorEventsRouter(db));
+  // Match the protected /api fallback after the public route in server.js.
+  app.use("/api", (_req, res) => res.sendStatus(401));
   return { app, db };
 }
 
-test("POST /api/hyrox/events inserts a valid event", async () => {
+test("server mounts the public events router before the protected API fallback", () => {
+  // server.js starts listeners, jobs and schedulers on import; inspect its mount
+  // and exercise that same middleware chain below without those side effects.
+  const source = readFileSync(new URL("../server.js", import.meta.url), "utf8");
+  const mount = 'app.use("/api/hyrox/events", hyroxEventsIpRateLimiter, hyroxEventsSessionRateLimiter, createHyroxCalculatorEventsRouter(pool));';
+  assert.ok(source.includes(mount));
+  assert.ok(source.indexOf(mount) < source.indexOf('\napp.use("/api", ...userAuth'));
+});
+
+test("POST /api/hyrox/events inserts a valid event without authentication through the production middleware chain", async () => {
   const { app, db } = buildApp();
   await withServer(app, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/hyrox/events`, {
@@ -97,7 +106,7 @@ test("POST /api/hyrox/events rejects malformed submissionId", async () => {
 });
 
 test("POST /api/hyrox/events rate-limits repeated events from the same session", async () => {
-  const { app } = buildApp(createDb(), true);
+  const { app } = buildApp();
   await withServer(app, async (baseUrl) => {
     let last;
     for (let i = 0; i < 31; i += 1) {
@@ -106,7 +115,19 @@ test("POST /api/hyrox/events rate-limits repeated events from the same session",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: "rate-session", eventName: "asset_downloaded" }),
       });
+      if (i < 30) assert.equal(last.status, 204);
     }
     assert.equal(last.status, 429);
+    assert.deepEqual(await last.json(), { error: "too_many_requests" });
   });
+});
+
+
+test("the events router does not handle GET or nested POST paths", async () => {
+  const { app, db } = buildApp();
+  await withServer(app, async (baseUrl) => {
+    assert.equal((await fetch(`${baseUrl}/api/hyrox/events`)).status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/hyrox/events/nested`, { method: "POST" })).status, 401);
+  });
+  assert.equal(db.rows.length, 0);
 });
